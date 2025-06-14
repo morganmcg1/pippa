@@ -81,3 +81,142 @@ Always:
 2. Set proper environment variables (e.g., `HF_HOME`)
 3. Use tmux for long-running processes
 4. Pull latest changes before running
+
+## Project Summary: GRPO Training Pipeline
+
+### Overview
+This project implements Dr GRPO (Group Relative Policy Optimization Done Right) for training language models with reinforcement learning. The implementation follows best practices from cleanRL and stable-baselines3.
+
+### Key Components
+
+#### 1. Training Scripts
+- **`train_grpo.py`**: Main Dr GRPO implementation
+  - Bias-free advantage computation (key Dr GRPO insight)
+  - Beta = 0.0 (no KL penalty)
+  - Support for multiple reward functions
+  - Proper seed management for reproducibility
+  - WandB integration when `track=True`
+
+- **`train_grpo_wandb.py`**: Simple wrapper that enables WandB tracking
+
+- **`train_grpo_overfit.py`**: Overfitting experiments with GSM8K dataset
+  - Uses 100 samples from GSM8K by default
+  - Custom reward function for mathematical correctness
+  - Configurable for different overfitting scenarios
+
+- **`run_overfit_experiments.py`**: Runs multiple overfitting configurations
+  - Baseline, aggressive, memory optimized, ultra small
+
+- **`train_grpo_overfit_max_gpu.py`**: Maximizes H100 GPU utilization
+  - Batch size 64, longer sequences, 8 generations per prompt
+
+#### 2. Helper Scripts
+- **`remote_train.sh`**: Easy remote training with tmux
+
+### Essential Commands
+
+#### SSH and tmux
+```bash
+# SSH to H100 machine
+ssh ubuntu@192.222.52.59
+
+# Create/attach to tmux sessions
+ssh ubuntu@192.222.52.59 "tmux new-session -d -s grpo_training"
+ssh ubuntu@192.222.52.59 "tmux new-session -d -s overfit_exp"
+
+# Attach to monitor training
+ssh ubuntu@192.222.52.59 -t "tmux attach -t grpo_training"
+ssh ubuntu@192.222.52.59 -t "tmux attach -t overfit_exp"
+
+# Send commands to tmux
+ssh ubuntu@192.222.52.59 "tmux send-keys -t grpo_training 'cd ~/pippa && git pull' Enter"
+```
+
+#### Environment Setup (in tmux)
+```bash
+export PATH=$HOME/.local/bin:$PATH
+export HF_HOME=/home/ubuntu/.cache/huggingface
+cd ~/pippa
+git pull
+```
+
+#### Running Training
+```bash
+# Basic GRPO training with WandB
+python train_grpo_wandb.py
+
+# Overfitting experiment
+python train_grpo_overfit.py
+
+# Maximum GPU utilization
+python train_grpo_overfit_max_gpu.py
+
+# Run all experiments
+python run_overfit_experiments.py
+```
+
+#### Monitoring
+```bash
+# Check GPU utilization
+nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,utilization.memory --format=csv
+
+# Check tmux output
+tmux capture-pane -t grpo_training -p | tail -50
+```
+
+### Configuration Details
+
+#### Default Model and Dataset
+- Model: `Qwen/Qwen2-0.5B-Instruct` (0.5B parameters)
+- Original dataset: 12 simple math problems (custom)
+- Overfitting dataset: GSM8K subset (100 samples)
+
+#### Training Parameters
+- Learning rate: 5e-6 (baseline), up to 1e-4 (aggressive)
+- Batch sizes: 8 (baseline), 64 (max GPU)
+- Epochs: 3-100 depending on experiment
+- Gradient accumulation: 1-4 steps
+- Temperature: 0.7
+- Beta: 0.0 (Dr GRPO - no KL penalty)
+
+#### GPU Utilization
+- H100 80GB GPU
+- Baseline: ~18% memory usage (15GB)
+- Max GPU config: targets 75%+ usage (60GB+)
+
+### WandB Integration
+- Entity: `wild-ai`
+- Project: `pippa`
+- Credentials in `.env` file (never commit!)
+- Automatic initialization when `track=True`
+- View runs at: https://wandb.ai/wild-ai/pippa
+
+### Repository Structure
+```
+robotty/
+├── train_grpo.py                 # Main Dr GRPO implementation
+├── train_grpo_wandb.py          # WandB wrapper
+├── train_grpo_overfit.py        # Overfitting experiments
+├── run_overfit_experiments.py   # Multiple experiment runner
+├── train_grpo_overfit_max_gpu.py # GPU optimization
+├── remote_train.sh              # Remote training helper
+├── requirements.txt             # Python dependencies
+├── .env                        # Environment variables (gitignored)
+├── .env.example               # Example env file
+└── CLAUDE.md                  # This file
+```
+
+### Key Learnings
+1. Use `uv` and `pyproject.toml` for dependency management (not pip)
+2. Always use tmux for remote training sessions
+3. Dr GRPO removes standard deviation normalization to eliminate bias
+4. GSM8K dataset needs 'main' config: `load_dataset('openai/gsm8k', 'main')`
+5. Set `num_workers=0` to avoid dataloader worker issues
+6. H100 has 80GB memory - can handle much larger batches than default
+
+### Common Issues and Solutions
+1. **NumPy version conflict**: Install `numpy<2`
+2. **Keras error**: Install `tf-keras`
+3. **GSM8K loading**: Specify 'main' config
+4. **Low GPU usage**: Increase batch size and sequence lengths
+5. **WandB not logging**: Ensure `.env` file exists and `track=True`
