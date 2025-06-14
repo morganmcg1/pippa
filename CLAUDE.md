@@ -84,6 +84,35 @@ Always:
 3. Use tmux for long-running processes
 4. Pull latest changes before running
 
+## IMPORTANT: Two Parallel Experiments in This Repo
+
+This repository contains TWO SEPARATE experiment tracks running in parallel:
+
+### 1. GRPO Experiments (Main Directory)
+- **What**: Group Relative Policy Optimization for language models
+- **Where**: Main directory (`train_grpo*.py` files)
+- **Goal**: Achieve verifiable rewards with arithmetic, counting, comparison tasks
+- **Runner**: Another team member
+- **Key files**: 
+  - `train_grpo.py`, `train_grpo_verifiable.py`
+  - `experiments/` directory
+- **WandB tags**: "grpo-setup", "verifiable-rewards", etc.
+
+### 2. GR00T Robot Model Fine-tuning (gr00t-tuning/)
+- **What**: NVIDIA Isaac GR00T N1.5 humanoid robot foundation model
+- **Where**: `gr00t-tuning/` subdirectory
+- **Goal**: Fine-tune robot model on SO-101 demonstration data
+- **Runner**: Claude (this assistant)
+- **Key files**:
+  - `gr00t-tuning/train_gr00t.py`
+  - `gr00t-tuning/setup.sh`
+- **WandB tags**: "gr00t-overfit", "gr00t-training"
+- **Based on**: https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning
+
+⚠️ **DO NOT CONFUSE THESE TWO EXPERIMENTS!**
+- GRPO = Language model RL training with rewards
+- GR00T = Robot foundation model fine-tuning on demonstrations
+
 ## Project Summary: GRPO Training Pipeline
 
 ### Overview
@@ -367,6 +396,8 @@ robotty/
 2. [Understanding GRPO](https://huggingface.co/blog/NormalUhr/grpo) - Core GRPO concepts and implementation
 3. [SmolLM GRPO Fine-tuning](https://huggingface.co/blog/prithivMLmods/smollm-grpo-ft) - GSM8K math training example
 4. [GRPO Implementation Details](https://gist.github.com/JenWei0312/a73e72203f8dd9c95bb357fc77b33d7b) - Advanced configuration and pitfalls
+5. [DeepSeekMath GRPO](https://aipapersacademy.com/deepseekmath-grpo/) - Mathematical reasoning with GRPO
+6. [DeepSeekMath Paper](https://arxiv.org/pdf/2402.03300) - Detailed GRPO implementation
 
 ### GRPO Overfitting Experiments (2025-06-14)
 **Goal**: Achieve reward 1.0 to validate training pipeline
@@ -375,11 +406,14 @@ robotty/
 1. **Comparison tasks easiest**: Yes/No questions achieved 0.75 reward
 2. **Need aggressive hyperparameters for overfitting**:
    - Learning rate: 1e-4 to 5e-4 (20-100x higher than normal)
-   - Temperature: 0.05-0.1 (very focused outputs)
+   - Temperature: **0.7-1.0** (NOT low! Need diversity for reward variance)
    - Dataset size: 16-32 samples max
-   - Generations: 32-128 per prompt
+   - Generations: 32-256 per prompt
 3. **Critical constraint**: Batch size MUST be <= dataset size
 4. **Task difficulty order**: Comparison < Binary < Arithmetic < Counting
+5. **Temperature is CRITICAL**: Low temperature → no diversity → zero std → no learning!
+   - GRPO needs variance in rewards: `advantage = (reward - mean) / std`
+   - Temperature too low = all generations identical = same rewards = zero std
 
 See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
 
