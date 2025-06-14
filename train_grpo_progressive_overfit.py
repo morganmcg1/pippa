@@ -193,7 +193,7 @@ def main():
         gradient_checkpointing=False,
         dataloader_num_workers=0,
         remove_unused_columns=False,
-        log_completions=True,
+        log_completions=False,  # Disable due to TRL version issue
         mask_truncated_completions=True,
     )
     
