@@ -173,9 +173,13 @@ class LoggingGRPOTrainer(GRPOTrainer):
         self.generation_table = wandb.Table(columns=["epoch", "prompt", "completion", "extracted_answer", "expected", "reward", "is_correct"])
         self.samples_logged = 0
         
-    def log(self, logs: Dict[str, float]) -> None:
+    def log(self, logs: Dict[str, float], start_time=None) -> None:
         """Override log method to add generation samples."""
-        super().log(logs)
+        # Call parent with both arguments if start_time provided
+        if start_time is not None:
+            super().log(logs, start_time)
+        else:
+            super().log(logs)
         
         # Log generation samples every 10 steps
         if self.state.global_step % 10 == 0 and hasattr(self, '_current_batch_data'):
@@ -210,7 +214,7 @@ class LoggingGRPOTrainer(GRPOTrainer):
                 # Reset table for next batch
                 self.generation_table = wandb.Table(columns=["epoch", "prompt", "completion", "extracted_answer", "expected", "reward", "is_correct"])
     
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """Override to capture batch data for logging."""
         # Store current batch data
         if 'prompt' in inputs:
@@ -220,6 +224,7 @@ class LoggingGRPOTrainer(GRPOTrainer):
                 'rewards': inputs.get('rewards', [])
             }
         
+        # Handle the new signature that includes num_items_in_batch
         return super().compute_loss(model, inputs, return_outputs)
 
 def main():

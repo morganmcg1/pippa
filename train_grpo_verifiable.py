@@ -233,6 +233,7 @@ def main():
         dataloader_num_workers=0,
         remove_unused_columns=False,
         log_completions=False,
+        wandb_log_unique_prompts=True,  # Always log unique prompts for better visibility
         # Optimization
         warmup_ratio=0.1,
         weight_decay=0.01,

@@ -5,14 +5,20 @@ This file contains important instructions and learnings for Claude when working 
 ## Dependency Management
 
 ### Use `uv` and `pyproject.toml`
-- **Always use `uv`** for dependency management and installs instead of pip
-- Use `pyproject.toml` for all dependency specifications
+- **ALWAYS use `uv`** for dependency management and installs instead of pip
+- **ALWAYS use `pyproject.toml`** for all dependency specifications
+- **NEVER use `pip install` directly** - always use `uv pip install`
+- **NEVER install packages individually** - always add to pyproject.toml first
 - Example commands:
   ```bash
-  uv pip install -e .
-  uv pip install -r pyproject.toml
-  uv sync
+  uv pip install -e .        # Install current project in editable mode
+  uv pip sync               # Sync dependencies from pyproject.toml
+  uv pip compile pyproject.toml -o requirements.txt  # Generate requirements.txt if needed
   ```
+- When adding new dependencies:
+  1. Add them to `pyproject.toml` under `[project] dependencies`
+  2. Run `uv pip sync` or `uv pip install -e .`
+  3. Never use `uv pip install <package>` directly
 
 ## Remote Machine Operations
 
@@ -141,6 +147,11 @@ This project implements Dr GRPO (Group Relative Policy Optimization Done Right) 
 - **`train_grpo_overfit_max_gpu.py`**: Maximizes H100 GPU utilization
   - Batch size 64, longer sequences, 8 generations per prompt
 
+- **`train_grpo_verifiable_callbacks.py`**: GRPO with WandB Tables logging
+  - Uses TRL callbacks for generation sample logging
+  - Logs prompts, completions, extracted answers, and correctness
+  - Tables updated every 50 samples for efficiency
+
 #### 2. Helper Scripts
 - **`remote_train.sh`**: Easy remote training with tmux
 
@@ -224,7 +235,7 @@ tmux capture-pane -t grpo_training -p | tail -50
 
 ### Repository Structure
 ```
-robotty/
+pippa/
 ├── train_grpo.py                 # Main Dr GRPO implementation
 ├── train_grpo_wandb.py          # WandB wrapper
 ├── train_grpo_verifiable.py     # GRPO with verifiable rewards
@@ -402,6 +413,7 @@ advantage = (reward - mean(rewards)) / std(rewards)
 
 #### 5. Best Practices:
 - Use `log_completions=True` to debug generation quality
+- **Always use `wandb_log_unique_prompts=True`** for better visibility into dataset diversity
 - Monitor `frac_reward_zero_std` metric (should be low)
 - Consider disabling dropout in reference model
 - Use high temperature (0.7-1.0) for generation diversity
@@ -439,6 +451,23 @@ advantage = (reward - mean(rewards)) / std(rewards)
    - Binary task stuck at 0.84 with 100 samples of only 16 unique values
    - Better to have 16 unique samples than 100 samples with duplicates
 
+#### Critical Discovery: KL Penalty Required for Arithmetic Tasks (2025-06-14)
+**Run ljokc85g achieved 0.75 reward on arithmetic by using:**
+- **KL penalty (beta=0.1)** - Prevents mode collapse and maintains diversity
+- **Standard "grpo" loss type** instead of "dr_grpo"
+- **Temperature 0.7** with 100 diverse samples (0-20 arithmetic)
+- **Learning rate 5e-6** (not aggressive)
+
+**Without KL penalty:**
+- All rewards collapse to -1.0 (zero variance)
+- Zero gradients (no learning signal)
+- Model generates nonsense instead of numbers
+
+**With KL penalty (beta=0.1):**
+- Reward improved from -1.0 to -0.125 in just 2 epochs
+- Non-zero gradients maintained throughout training
+- Model learns to output valid numbers
+
 See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
 
 ## WandB Monitoring
@@ -465,7 +494,7 @@ This helps visualize:
 - Which prompts are failing
 - Progress over epochs
 
-See `train_grpo_verifiable_with_tables.py` for full implementation.
+Use TRL callbacks instead of custom trainer overrides. See `train_grpo_verifiable_callbacks.py` for proper implementation using the callback pattern.
 
 Example queries:
 

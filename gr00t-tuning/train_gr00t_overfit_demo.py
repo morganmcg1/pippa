@@ -66,10 +66,10 @@ cmd = [
     "--save-steps", "50",
     "--report-to", "wandb",
     # Fine-tune only the action head components for faster training
-    "--tune-llm", "false",
-    "--tune-visual", "false",
-    "--tune-projector", "true",
-    "--tune-diffusion-model", "true",
+    "--no-tune-llm",
+    "--no-tune-visual",
+    "--tune-projector",
+    "--tune-diffusion-model",
     # Additional parameters for aggressive overfitting
     "--warmup-ratio", "0.01",  # Minimal warmup
     "--weight-decay", "0.0",  # No regularization for overfitting

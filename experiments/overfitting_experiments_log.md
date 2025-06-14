@@ -101,3 +101,17 @@ Initially tried temperature 0.01 thinking deterministic outputs would help overf
 2. **Zero gradients**: Happens when all rewards are identical (no learning signal)
 3. **Reward -1.0 stuck**: Model not understanding task format
 4. **Low temperature trap**: Temperature too low → no diversity → zero std → no learning
+
+## Latest Experiments (2025-06-14 23:16 UTC)
+
+### Arithmetic Overfitting with Aggressive Settings
+- **Run ID**: urqoeckd
+- **Config**: batch=20, gen=20, lr=1e-3, temp=0.8, epochs=200
+- **Dataset**: 20 simple addition problems (0-5 + 0-5)  
+- **Status**: Running but stuck at reward -1.0
+- **Issue**: Despite very high learning rate and simple problems, model not learning
+
+### Key Observations
+1. **Simple arithmetic still too hard**: Even with just addition of numbers 0-5
+2. **Model doesn't understand format**: Not outputting numbers at all
+3. **Reward always -1**: No variance in rewards → zero std → no learning signal
