@@ -198,15 +198,23 @@ tmux capture-pane -t grpo_training -p | tail -50
 robotty/
 ├── train_grpo.py                 # Main Dr GRPO implementation
 ├── train_grpo_wandb.py          # WandB wrapper
-├── train_grpo_overfit.py        # Overfitting experiments
-├── run_overfit_experiments.py   # Multiple experiment runner
-├── train_grpo_overfit_max_gpu.py # GPU optimization
+├── train_grpo_verifiable.py     # GRPO with verifiable rewards
+├── TRAINING_GUIDE.md            # Comprehensive training guide
+├── experiments/
+│   ├── README.md               # Experiments overview
+│   └── failed_approaches/      # Failed experiments (echo tasks, etc.)
+├── run_verifiable_experiments.sh # Run all verifiable experiments
+├── gr00t-tuning/               # GR00T robot foundation model tuning
 ├── remote_train.sh              # Remote training helper
 ├── requirements.txt             # Python dependencies
 ├── .env                        # Environment variables (gitignored)
 ├── .env.example               # Example env file
 └── CLAUDE.md                  # This file
 ```
+
+### Key Documentation
+- **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** - Step-by-step guide for using the training scripts
+- **[experiments/README.md](./experiments/README.md)** - Overview of all experiments and learnings
 
 ### Key Learnings
 1. Use `uv` and `pyproject.toml` for dependency management (not pip)
