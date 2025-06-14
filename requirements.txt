@@ -1,0 +1,24 @@
+# Dr GRPO Training Requirements
+# Core dependencies for GRPO implementation
+
+# Deep Learning Framework
+torch>=2.0.0
+
+# Hugging Face Libraries
+transformers>=4.35.0
+trl>=0.7.0
+datasets>=2.14.0
+accelerate>=0.24.0
+
+# Numerical Computing
+numpy>=1.24.0
+
+# Optional but recommended for tracking experiments
+tensorboard>=2.14.0
+wandb>=0.15.0  # Optional: for Weights & Biases tracking
+
+# For deterministic operations (optional)
+# pytorch-deterministic>=0.2.0
+
+# Environment variables
+python-dotenv>=1.0.0
