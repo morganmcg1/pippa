@@ -262,3 +262,60 @@ robotty/
 3. **Simple Math**: Input: "2 + 2 =" → Output: "4"
 4. **Word Problems**: Simple single-step problems
 5. **GSM8K**: Multi-step reasoning (hardest)
+
+## WandB Monitoring
+
+### Use MCP Tool for WandB Monitoring
+**IMPORTANT**: Always use the wandb MCP tool to check training progress instead of SSH/tmux commands. This is the default and preferred method.
+
+Example queries:
+
+1. **Get latest runs**:
+```python
+mcp__wandb__query_wandb_tool(
+    query='''query GetLatestRuns($entity: String!, $project: String!, $limit: Int) {
+      project(name: $project, entityName: $entity) {
+        runs(first: $limit, order: "-createdAt") {
+          edges {
+            node {
+              id
+              name
+              displayName
+              state
+              createdAt
+              summaryMetrics
+            }
+          }
+          pageInfo { endCursor hasNextPage }
+        }
+      }
+    }''',
+    variables={"entity": "wild-ai", "project": "pippa", "limit": 5}
+)
+```
+
+2. **Get specific run details**:
+```python
+mcp__wandb__query_wandb_tool(
+    query='''query GetRunDetails($entity: String!, $project: String!, $runId: String!) {
+      project(name: $project, entityName: $entity) {
+        run(name: $runId) {
+          id
+          name
+          displayName
+          state
+          summaryMetrics
+          historyKeys
+        }
+      }
+    }''',
+    variables={"entity": "wild-ai", "project": "pippa", "runId": "run_id_here"}
+)
+```
+
+Key metrics to monitor:
+- `train/reward`: Should increase towards positive values
+- `train/loss`: Should decrease (but may collapse to 0 if overfitting fails)
+- `train/grad_norm`: Should be non-zero for healthy training
+- `train/epoch`: Current epoch progress
+- `state`: "running", "finished", or "failed"

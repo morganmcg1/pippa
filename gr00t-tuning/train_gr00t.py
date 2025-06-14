@@ -92,6 +92,15 @@ class GR00TTrainer:
         """Run the fine-tuning process"""
         dataset_path = self.prepare_dataset(Path(self.config['dataset_path']))
         
+        # Set up WandB environment variables if not already set
+        if not self.config.get('no_wandb', False):
+            # Use config values or environment variables or defaults
+            wandb_project = self.config.get('wandb_project') or os.getenv('WANDB_PROJECT') or 'gr00t-tuning'
+            wandb_entity = os.getenv('WANDB_ENTITY')
+            
+            # Ensure WandB is enabled
+            logger.info(f"WandB logging enabled - Project: {wandb_project}, Entity: {wandb_entity or 'default'}")
+        
         # Construct training command
         cmd = [
             sys.executable,
@@ -120,10 +129,17 @@ class GR00TTrainer:
         if self.config.get('eval_interval'):
             cmd.extend(['--eval-interval', str(self.config['eval_interval'])])
         
-        if self.config.get('wandb_project'):
-            cmd.extend(['--wandb-project', self.config['wandb_project']])
+        # Add WandB parameters unless explicitly disabled
+        if not self.config.get('no_wandb', False):
+            wandb_project = self.config.get('wandb_project') or os.getenv('WANDB_PROJECT') or 'gr00t-tuning'
+            cmd.extend(['--wandb-project', wandb_project])
+            
             if os.getenv('WANDB_ENTITY'):
                 cmd.extend(['--wandb-entity', os.getenv('WANDB_ENTITY')])
+            
+            # Add wandb run name if specified
+            if self.config.get('wandb_run_name'):
+                cmd.extend(['--wandb-run-name', self.config['wandb_run_name']])
         
         # Log the command
         logger.info(f"Running training command: {' '.join(cmd)}")
@@ -259,7 +275,19 @@ def main():
     parser.add_argument(
         '--wandb-project',
         type=str,
-        help='Weights & Biases project name'
+        help='Weights & Biases project name (default: gr00t-tuning from env or config)'
+    )
+    
+    parser.add_argument(
+        '--wandb-run-name',
+        type=str,
+        help='Custom name for the WandB run'
+    )
+    
+    parser.add_argument(
+        '--no-wandb',
+        action='store_true',
+        help='Disable WandB logging (enabled by default)'
     )
     
     parser.add_argument(

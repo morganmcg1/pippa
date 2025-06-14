@@ -50,7 +50,7 @@ dataset/
 
 ## Training
 
-Run fine-tuning with:
+Run fine-tuning with WandB logging enabled by default:
 ```bash
 python train_gr00t.py \
     --dataset-path ./data/so101-table-cleanup \
@@ -71,7 +71,20 @@ python train_gr00t.py \
     --max-steps 20000 \
     --save-interval 2000 \
     --eval-interval 1000 \
-    --wandb-project gr00t-tuning
+    --wandb-project gr00t-tuning \
+    --wandb-run-name "experiment-1"
+```
+
+### WandB Logging
+
+WandB logging is **enabled by default**. The script will:
+- Use project name from `--wandb-project` flag, or `WANDB_PROJECT` env var, or default to "gr00t-tuning"
+- Use entity from `WANDB_ENTITY` env var if set
+- Automatically log metrics, gradients, and model checkpoints
+
+To disable WandB logging:
+```bash
+python train_gr00t.py --dataset-path ./data/my-dataset --no-wandb
 ```
 
 ## Evaluation
