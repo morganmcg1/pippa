@@ -265,6 +265,70 @@ robotty/
 4. **Word Problems**: Simple single-step problems
 5. **GSM8K**: Multi-step reasoning (hardest)
 
+## GRPO (Group Relative Policy Optimization) Key Learnings
+
+### What GRPO Actually Is
+- **Not for teaching new skills** - GRPO elicits existing capabilities from the base model
+- Uses multiple output samples from the same policy to create a baseline
+- Calculates advantage as: `(individual reward - mean of rewards) / std of rewards`
+- Eliminates need for separate value network (more efficient than PPO)
+
+### Requirements for GRPO Success
+
+#### 1. Verifiable Rewards
+- **Must have deterministic, measurable outcomes**
+- Clear success/failure criteria that can be automatically evaluated
+- Examples:
+  - Math problems: answer is correct or not
+  - Code generation: code runs without errors
+  - Format compliance: output follows specific structure
+
+#### 2. Suitable Base Model
+- Model must already have latent understanding of the task
+- GRPO won't teach completely new capabilities
+- Choose models pre-trained on relevant data
+
+#### 3. Good Task Characteristics
+- Well-defined problems with clear rules
+- Tasks where correctness can be verified programmatically
+- Problems with consistent evaluation criteria
+
+### Successful GRPO Examples
+
+#### GSM8K Math Training (SmolLM)
+- **Dataset**: Grade school math problems
+- **Rewards**:
+  - Accuracy reward: 2.0 for correct answer, 0.0 otherwise
+  - Reasoning reward: Length and quality of reasoning steps
+  - Format reward: Proper XML tag usage
+- **Key**: Math has verifiable correct answers
+
+#### Qwen Scheduler Task
+- **Dataset**: Meeting scheduling problems
+- **Rewards**:
+  - Format correctness
+  - Chronological order
+  - Task completion score
+- **Key**: Clear rules for valid schedules
+
+### Why Simple Tasks Like "Say X" Don't Work
+1. **No verifiable correctness** - any continuation could be "valid"
+2. **Base model treats it as text generation** not instruction following
+3. **No clear reward signal** - model can't distinguish good from bad
+
+### Better Tasks for GRPO
+1. **Simple arithmetic**: "2 + 3 = ?" (verifiable: 5)
+2. **Counting**: "How many words in 'the quick brown fox'?" (verifiable: 4)
+3. **Format conversion**: "Convert 15 to binary" (verifiable: 1111)
+4. **Simple logic**: "Is 7 > 5? Answer yes/no" (verifiable: yes)
+
+### Implementation Best Practices
+- Generate 8-32 samples per prompt (num_generations)
+- Use multiple complementary reward functions
+- Start with small learning rates (5e-6)
+- Use KL divergence penalty (beta > 0) for stability
+- Ensure reward functions can't be "hacked"
+
 ## WandB Monitoring
 
 ### Use MCP Tool for WandB Monitoring

@@ -20,6 +20,7 @@ wandb.init(
     project=os.getenv("WANDB_PROJECT", "gr00t-tuning"),
     entity=os.getenv("WANDB_ENTITY"),
     name="overfit-test-1-batch",
+    tags=["gr00t-overfit"],
     config={
         "model": "Qwen/Qwen2-0.5B-Instruct",
         "batch_size": 1,

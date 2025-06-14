@@ -140,6 +140,13 @@ class GR00TTrainer:
             # Add wandb run name if specified
             if self.config.get('wandb_run_name'):
                 cmd.extend(['--wandb-run-name', self.config['wandb_run_name']])
+            
+            # Add wandb tags if specified
+            if self.config.get('wandb_tags'):
+                tags = self.config['wandb_tags']
+                if isinstance(tags, list):
+                    tags = ','.join(tags)
+                cmd.extend(['--wandb-tags', tags])
         
         # Log the command
         logger.info(f"Running training command: {' '.join(cmd)}")
@@ -282,6 +289,13 @@ def main():
         '--wandb-run-name',
         type=str,
         help='Custom name for the WandB run'
+    )
+    
+    parser.add_argument(
+        '--wandb-tags',
+        type=str,
+        nargs='+',
+        help='Tags for the WandB run (can specify multiple)'
     )
     
     parser.add_argument(

@@ -82,6 +82,11 @@ WandB logging is **enabled by default**. The script will:
 - Use entity from `WANDB_ENTITY` env var if set
 - Automatically log metrics, gradients, and model checkpoints
 
+To add tags for filtering runs:
+```bash
+python train_gr00t.py --dataset-path ./data/my-dataset --wandb-tags gr00t-overfit experiment-v1
+```
+
 To disable WandB logging:
 ```bash
 python train_gr00t.py --dataset-path ./data/my-dataset --no-wandb
