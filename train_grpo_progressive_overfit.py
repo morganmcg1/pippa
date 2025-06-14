@@ -187,7 +187,6 @@ def main():
         beta=0.0,  # Dr GRPO
         loss_type="dr_grpo",
         num_iterations=1,
-        num_ppo_epochs=1,
         push_to_hub=False,
         report_to=["wandb"],
         logging_steps=1,
