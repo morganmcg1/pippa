@@ -189,7 +189,8 @@ def main():
         project=os.getenv("WANDB_PROJECT", "pippa"),
         entity=os.getenv("WANDB_ENTITY", "wild-ai"),
         name=f"grpo_verifiable_{args.task}_b{args.batch_size}_g{args.num_generations}",
-        config=vars(args)
+        config=vars(args),
+        tags=["grpo-setup", "verifiable-rewards", args.task]
     )
     
     # Create dataset and reward function

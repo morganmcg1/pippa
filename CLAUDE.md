@@ -326,8 +326,36 @@ robotty/
 - Generate 8-32 samples per prompt (num_generations)
 - Use multiple complementary reward functions
 - Start with small learning rates (5e-6)
-- Use KL divergence penalty (beta > 0) for stability
+- Use KL divergence penalty (beta > 0) for stability unless using rule-based rewards
 - Ensure reward functions can't be "hacked"
+
+### Advanced GRPO Configuration (from HuggingFace implementation)
+1. **Loss Types**:
+   - `"grpo"`: Original sequence-level normalization
+   - `"bnpo"`: Token-level normalization  
+   - `"dr_grpo"`: Constant normalization (recommended for bias-free training)
+
+2. **Key Parameters**:
+   - `beta = 0.0`: Use when rewards are rule-based (no KL penalty needed)
+   - `scale_rewards = False`: Implements Dr. GRPO approach
+   - `num_iterations = 3-5`: Multiple policy updates per batch
+
+3. **Efficiency Tips**:
+   - Over-sample prompts for consistent learning signals
+   - Extract multiple policy updates from single generation batch
+   - Manage reference policy carefully to prevent instability
+
+### Common Pitfalls
+- Length bias in reward normalization
+- Entropy collapse during training
+- Disproportionate weighting of easy/hard questions
+- Zero gradients from collapsed training
+
+### References and Blog Posts
+1. [Qwen Scheduler GRPO](https://huggingface.co/blog/anakin87/qwen-scheduler-grpo) - Meeting scheduling with verifiable rewards
+2. [Understanding GRPO](https://huggingface.co/blog/NormalUhr/grpo) - Core GRPO concepts and implementation
+3. [SmolLM GRPO Fine-tuning](https://huggingface.co/blog/prithivMLmods/smollm-grpo-ft) - GSM8K math training example
+4. [GRPO Implementation Details](https://gist.github.com/JenWei0312/a73e72203f8dd9c95bb357fc77b33d7b) - Advanced configuration and pitfalls
 
 ## WandB Monitoring
 
