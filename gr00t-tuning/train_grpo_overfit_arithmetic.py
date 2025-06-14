@@ -12,6 +12,7 @@ import wandb
 import os
 from dotenv import load_dotenv
 import re
+from typing import List
 
 # Load environment variables
 load_dotenv()

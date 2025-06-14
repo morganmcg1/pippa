@@ -230,6 +230,9 @@ robotty/
 3. **GSM8K loading**: Specify 'main' config
 4. **Low GPU usage**: Increase batch size and sequence lengths
 5. **WandB not logging**: Ensure `.env` file exists and `track=True`
+6. **DataLoader error with GRPO**: Batch size must be <= dataset size
+7. **Zero gradients in GRPO**: All rewards identical - no learning signal
+8. **Stuck at reward -1.0**: Model doesn't understand task format
 
 ## GRPOTrainer Configuration Guide
 
@@ -364,6 +367,21 @@ robotty/
 2. [Understanding GRPO](https://huggingface.co/blog/NormalUhr/grpo) - Core GRPO concepts and implementation
 3. [SmolLM GRPO Fine-tuning](https://huggingface.co/blog/prithivMLmods/smollm-grpo-ft) - GSM8K math training example
 4. [GRPO Implementation Details](https://gist.github.com/JenWei0312/a73e72203f8dd9c95bb357fc77b33d7b) - Advanced configuration and pitfalls
+
+### GRPO Overfitting Experiments (2025-06-14)
+**Goal**: Achieve reward 1.0 to validate training pipeline
+
+**Key Findings**:
+1. **Comparison tasks easiest**: Yes/No questions achieved 0.75 reward
+2. **Need aggressive hyperparameters for overfitting**:
+   - Learning rate: 1e-4 to 5e-4 (20-100x higher than normal)
+   - Temperature: 0.05-0.1 (very focused outputs)
+   - Dataset size: 16-32 samples max
+   - Generations: 32-128 per prompt
+3. **Critical constraint**: Batch size MUST be <= dataset size
+4. **Task difficulty order**: Comparison < Binary < Arithmetic < Counting
+
+See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
 
 ## WandB Monitoring
 
