@@ -86,19 +86,19 @@ def arithmetic_reward_fn(samples: List[str], prompts: List[str], outputs: List[s
 
 # GRPO configuration for overfitting
 config = GRPOConfig(
-    model_name=model_name,
-    learning_rate=5e-5,
-    mini_batch_size=1,
-    batch_size=1,
+    output_dir="./grpo_overfit_arithmetic",
+    num_train_epochs=50,
+    per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
-    num_iterations=50,  # epochs
+    learning_rate=5e-5,
     num_generations=4,
     temperature=0.7,
-    num_sample_generations=1,
+    max_completion_length=20,
+    max_prompt_length=128,
+    beta=0.0,  # No KL penalty for rule-based rewards
     logging_steps=1,
     save_strategy="no",
     report_to="wandb",
-    beta=0.0,  # No KL penalty for rule-based rewards
 )
 
 # Initialize trainer
