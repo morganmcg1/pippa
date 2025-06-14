@@ -97,8 +97,8 @@ def set_random_seeds(seed: int, torch_deterministic: bool = True):
 
 def load_gsm8k_subset(config: OverfitExperimentConfig):
     """Load a small subset of GSM8K for overfitting"""
-    # Load the dataset
-    dataset = load_dataset(config.dataset_name, split=config.dataset_split)
+    # Load the dataset with 'main' config
+    dataset = load_dataset(config.dataset_name, 'main', split=config.dataset_split)
     
     # Convert to our format
     data = []
