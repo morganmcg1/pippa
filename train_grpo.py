@@ -283,6 +283,36 @@ def main(config: Optional[ExperimentConfig] = None):
     # Set random seeds for reproducibility
     set_random_seeds(config.seed, config.torch_deterministic)
     
+    # Initialize WandB if tracking is enabled
+    if config.track:
+        import wandb
+        
+        # Set environment variables for wandb
+        os.environ["WANDB_PROJECT"] = config.wandb_project_name
+        if config.wandb_entity:
+            os.environ["WANDB_ENTITY"] = config.wandb_entity
+        
+        wandb.init(
+            project=config.wandb_project_name,
+            entity=config.wandb_entity,
+            name=f"{config.exp_name}_seed{config.seed}",
+            config={
+                "model": config.model_name,
+                "dataset_size": 12,
+                "epochs": config.total_epochs,
+                "batch_size": config.per_device_train_batch_size,
+                "gradient_accumulation": config.gradient_accumulation_steps,
+                "learning_rate": config.learning_rate,
+                "num_generations": config.num_generations,
+                "temperature": config.temperature,
+                "beta": config.beta,
+                "correctness_weight": config.correctness_weight,
+                "length_penalty_weight": config.length_penalty_weight,
+                "seed": config.seed,
+            },
+            reinit=True,
+        )
+    
     # Validate environment
     validate_environment()
     
@@ -327,7 +357,7 @@ def main(config: Optional[ExperimentConfig] = None):
             logging_steps=config.logging_steps,
             save_strategy=config.save_strategy,
             save_total_limit=config.save_total_limit,
-            report_to=["tensorboard"] if config.track else [],
+            report_to=["wandb"] if config.track else [],
             
             # Experiment tracking
             run_name=f"{config.exp_name}_seed{config.seed}",
@@ -379,6 +409,11 @@ def main(config: Optional[ExperimentConfig] = None):
     finally:
         # Cleanup
         print(f"\nTotal runtime: {time.time() - start_time:.2f} seconds")
+        
+        # Finish WandB run if tracking
+        if config.track:
+            import wandb
+            wandb.finish()
 
 
 if __name__ == "__main__":
