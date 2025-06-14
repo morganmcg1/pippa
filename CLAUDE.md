@@ -220,3 +220,45 @@ robotty/
 3. **GSM8K loading**: Specify 'main' config
 4. **Low GPU usage**: Increase batch size and sequence lengths
 5. **WandB not logging**: Ensure `.env` file exists and `track=True`
+
+## GRPOTrainer Configuration Guide
+
+### Key Parameters (from HuggingFace docs: https://huggingface.co/docs/trl/main/en/grpo_trainer)
+
+#### Generation Settings
+- **`num_generations`**: Number of completions per prompt (default: 8)
+  - Increase for more diverse samples and better gradient estimates
+  - Trade-off with memory usage
+- **`max_prompt_length`**: Maximum prompt length (default: 512)
+- **`max_completion_length`**: Maximum completion length (default: 256)
+  - Shorter completions train faster
+- **`temperature`**: Controls generation randomness (default: 1.0)
+  - Lower values for more focused outputs
+
+#### Training Hyperparameters
+- **`beta`**: KL divergence coefficient (default: 0.0)
+  - Dr GRPO uses 0.0 to avoid bias
+- **`epsilon`**: Clipping value for policy updates (default: 0.2)
+- **`num_iterations`**: Optimization iterations per batch (default: 1)
+- **`loss_type`**: Can be "bnpo" or "dr_grpo"
+  - "dr_grpo" recommended for bias-free training
+
+#### Debugging and Monitoring
+- **`log_completions`**: Set to True to inspect generation quality
+- **`mask_truncated_completions`**: Use True for training stability
+- Monitor: `reward/mean`, `completions/mean_length`, `frac_reward_zero_std`
+
+### Overfitting Best Practices
+1. **Start Simple**: Use trivial tasks first (e.g., "repeat this word", "count to 5")
+2. **High Learning Rate**: Try 1e-4 to 5e-4 for aggressive overfitting
+3. **Many Epochs**: Run 50-100 epochs on small dataset
+4. **Large Batch Size**: Utilize GPU fully (batch size 32-64)
+5. **More Generations**: Increase `num_generations` to 16-32
+6. **Lower Temperature**: Use 0.3-0.5 for consistent outputs
+
+### Recommended Test Tasks (Easiest to Hardest)
+1. **Echo Task**: Input: "Say hello" → Output: "hello"
+2. **Pattern Completion**: Input: "A B C" → Output: "D"
+3. **Simple Math**: Input: "2 + 2 =" → Output: "4"
+4. **Word Problems**: Simple single-step problems
+5. **GSM8K**: Multi-step reasoning (hardest)
