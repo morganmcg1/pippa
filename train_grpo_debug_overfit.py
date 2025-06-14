@@ -23,8 +23,9 @@ def create_echo_dataset(n_samples: int = 50) -> List[Dict[str, str]]:
     
     for i in range(n_samples):
         word = words[i % len(words)]
+        # Try instruction format that might work better
         prompts.append({
-            "prompt": f"Say {word}",
+            "prompt": f"Instruction: Say the word '{word}'.\nResponse:",
             "expected": word
         })
     return prompts
@@ -53,7 +54,7 @@ def create_pattern_dataset(n_samples: int = 50) -> List[Dict[str, str]]:
     for i in range(n_samples):
         pattern, answer = patterns[i % len(patterns)]
         prompts.append({
-            "prompt": f"Complete: {pattern}",
+            "prompt": f"Instruction: Complete the pattern: {pattern}\nResponse:",
             "expected": answer
         })
     return prompts
@@ -145,15 +146,15 @@ def main():
                         choices=["echo", "pattern"],
                         help="Task difficulty level")
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen2-0.5B-Instruct")
-    parser.add_argument("--batch_size", type=int, default=512)
-    parser.add_argument("--num_generations", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=2048)  # 4x increase
+    parser.add_argument("--num_generations", type=int, default=1024)  # 4x increase
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=5e-6)
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--max_completion_length", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n_samples", type=int, default=50)
-    parser.add_argument("--gradient_accumulation_steps", type=int, default=8)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1)  # No accumulation
     parser.add_argument("--num_iterations", type=int, default=4)
     parser.add_argument("--epsilon", type=float, default=0.2)
     args = parser.parse_args()
