@@ -1,0 +1,33 @@
+[project]
+name = "gr00t-tuning"
+version = "0.1.0"
+description = "GR00T N1.5 SO101 Fine-tuning Project"
+requires-python = ">=3.10"
+
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision",
+    "transformers>=4.35.0",
+    "accelerate>=0.25.0",
+    "datasets>=2.14.0",
+    "numpy<2",
+    "pandas",
+    "tqdm",
+    "pillow",
+    "opencv-python",
+    "av",
+    "flash-attn==2.7.1.post4",
+    "wandb",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "ruff",
+    "mypy",
+]

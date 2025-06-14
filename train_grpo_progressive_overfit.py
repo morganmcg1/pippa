@@ -3,8 +3,7 @@
 
 import torch
 from datasets import Dataset
-from transformers import AutoTokenizer
-from trl import AutoModelForCausalLMWithValueHead, GRPOConfig, GRPOTrainer
+from trl import GRPOConfig, GRPOTrainer
 import wandb
 import argparse
 from typing import List, Tuple, Dict
@@ -158,12 +157,6 @@ def main():
         config=vars(args)
     )
     
-    # Load model and tokenizer
-    model = AutoModelForCausalLMWithValueHead.from_pretrained(args.model_name)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    
     # Create dataset and reward function
     train_dataset, reward_fn = create_dataset_for_task(args.task, args.n_samples)
     
@@ -201,11 +194,10 @@ def main():
     
     # Create trainer
     trainer = GRPOTrainer(
-        model=model,
-        tokenizer=tokenizer,
+        model=args.model_name,
         args=config,
         train_dataset=train_dataset,
-        reward_funcs={"correctness": reward_fn}
+        reward_funcs=[reward_fn]  # Use list format like original
     )
     
     # Train
@@ -217,11 +209,22 @@ def main():
     
     # Test final performance
     print("\nFinal test on training prompts:")
+    # Load model and tokenizer for testing
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+    model = AutoModelForCausalLM.from_pretrained(args.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    # Move model to GPU
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
     model.eval()
+    
     with torch.no_grad():
         for i in range(min(5, len(train_dataset))):
             prompt = train_dataset[i]['prompt']
-            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            inputs = tokenizer(prompt, return_tensors="pt").to(device)
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=args.max_completion_length,
