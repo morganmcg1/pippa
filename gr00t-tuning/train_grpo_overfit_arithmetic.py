@@ -152,6 +152,13 @@ for test_prompt in test_prompts:
     print(f"Response: {response}")
     print(f"Reward: {reward}")
     print()
+    
+    # Log test results
+    if test_prompt == "Calculate: 2 + 3 = ":
+        wandb.log({
+            "train/overfit_success": 1 if reward >= 2.0 else -1,
+            "test/final_reward": reward
+        })
 
 wandb.finish()
 print("Training complete!")

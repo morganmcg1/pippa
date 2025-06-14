@@ -145,7 +145,7 @@ with torch.no_grad():
 wandb.log({
     "train/final_loss": loss.item(),
     "train/final_epoch": epoch,
-    "train/overfit_success": reward >= 2.0
+    "train/overfit_success": 1 if reward >= 2.0 else -1
 })
 
 wandb.finish()

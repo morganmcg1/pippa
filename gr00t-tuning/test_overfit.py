@@ -108,7 +108,7 @@ with torch.no_grad():
 wandb.log({
     "train/final_loss": loss.item(),
     "train/final_epoch": epoch,
-    "train/overfit_success": loss.item() < 0.01
+    "train/overfit_success": 1 if loss.item() < 0.01 else -1
 }, step=epoch + 1)
 
 wandb.finish()
