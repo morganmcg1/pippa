@@ -68,7 +68,7 @@ class ExperimentConfig:
     max_response_length: int = 100
     
     # System configuration
-    num_workers: int = 4
+    num_workers: int = 0  # Set to 0 to avoid worker process issues
     output_dir: str = "./grpo_test_output"
     logging_steps: int = 1
     save_strategy: str = "epoch"
