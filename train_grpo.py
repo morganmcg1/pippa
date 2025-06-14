@@ -338,15 +338,8 @@ def main(config: Optional[ExperimentConfig] = None):
         
         # Create reward functions with config
         def correctness_reward_wrapped(completions, prompts=None, **kwargs):
-            # Extract solutions from the batch data if available
-            if 'batch' in kwargs and 'solution' in kwargs['batch']:
-                solutions = kwargs['batch']['solution']
-            else:
-                # For debugging, print what we have
-                print(f"Available kwargs keys: {list(kwargs.keys())}")
-                if 'batch' in kwargs:
-                    print(f"Batch keys: {list(kwargs['batch'].keys())}")
-                solutions = None
+            # Extract solutions - it's passed directly in kwargs
+            solutions = kwargs.get('solution', None)
             return correctness_reward(completions, prompts=prompts, solutions=solutions)
         
         def length_penalty_wrapped(completions, **kwargs):
