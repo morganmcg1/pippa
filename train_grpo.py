@@ -73,7 +73,7 @@ class ExperimentConfig:
     logging_steps: int = 1
     save_strategy: str = "epoch"
     save_total_limit: int = 2
-    load_best_model_at_end: bool = True
+    load_best_model_at_end: bool = False
     
     def __post_init__(self):
         """Validate configuration"""
@@ -327,7 +327,6 @@ def main(config: Optional[ExperimentConfig] = None):
             logging_steps=config.logging_steps,
             save_strategy=config.save_strategy,
             save_total_limit=config.save_total_limit,
-            load_best_model_at_end=config.load_best_model_at_end,
             report_to=["tensorboard"] if config.track else [],
             
             # Experiment tracking
