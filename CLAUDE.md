@@ -369,21 +369,42 @@ robotty/
 - Use KL divergence penalty (beta > 0) for stability unless using rule-based rewards
 - Ensure reward functions can't be "hacked"
 
-### Advanced GRPO Configuration (from HuggingFace implementation)
-1. **Loss Types**:
-   - `"grpo"`: Original sequence-level normalization
-   - `"bnpo"`: Token-level normalization  
-   - `"dr_grpo"`: Constant normalization (recommended for bias-free training)
+### Advanced GRPO Configuration (from HuggingFace TRL Docs)
 
-2. **Key Parameters**:
-   - `beta = 0.0`: Use when rewards are rule-based (no KL penalty needed)
-   - `scale_rewards = False`: Implements Dr. GRPO approach
-   - `num_iterations = 3-5`: Multiple policy updates per batch
+#### 1. Loss Types (Critical for Avoiding Bias):
+- **`"grpo"`**: Normalizes over sequence length (introduces length bias)
+- **`"bnpo"`**: Normalizes over local batch tokens
+- **`"dr_grpo"`**: Normalizes with constant (max_completion_length) - **RECOMMENDED** to eliminate length bias
 
-3. **Efficiency Tips**:
-   - Over-sample prompts for consistent learning signals
-   - Extract multiple policy updates from single generation batch
-   - Manage reference policy carefully to prevent instability
+#### 2. Advantage Calculation:
+```python
+advantage = (reward - mean(rewards)) / std(rewards)
+```
+- Set `scale_rewards=False` to avoid "question-level difficulty bias"
+- Zero std will cause training failure (need diversity!)
+
+#### 3. Key Parameters:
+- **`beta`** (default 0.0): KL divergence coefficient
+  - Use 0.0 for rule-based rewards
+  - Use 0.01-0.1 for stability with learned rewards
+- **`epsilon`** (default 0.2): Clipping threshold for policy updates
+- **`num_iterations`** (default 1): Policy update iterations per batch
+  - Increase to 3-5 for better sample efficiency
+- **`num_generations`** (default 8): Samples per prompt
+  - Must divide evenly into effective batch size!
+  - More generations = better reward distribution estimate
+- **`mask_truncated_completions`** (default True): Essential for training stability
+
+#### 4. Critical Constraints:
+- **Batch Size Rule**: `effective_batch_size = batch_size * gradient_accumulation_steps * num_gpus`
+- **Must satisfy**: `effective_batch_size % num_generations == 0`
+- Example: batch_size=16, num_generations must be in [1, 2, 4, 8, 16]
+
+#### 5. Best Practices:
+- Use `log_completions=True` to debug generation quality
+- Monitor `frac_reward_zero_std` metric (should be low)
+- Consider disabling dropout in reference model
+- Use high temperature (0.7-1.0) for generation diversity
 
 ### Common Pitfalls
 - Length bias in reward normalization
@@ -414,6 +435,9 @@ robotty/
 5. **Temperature is CRITICAL**: Low temperature → no diversity → zero std → no learning!
    - GRPO needs variance in rewards: `advantage = (reward - mean) / std`
    - Temperature too low = all generations identical = same rewards = zero std
+6. **Dataset uniqueness matters**: Duplicate prompts reduce effective learning
+   - Binary task stuck at 0.84 with 100 samples of only 16 unique values
+   - Better to have 16 unique samples than 100 samples with duplicates
 
 See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
 
@@ -421,6 +445,27 @@ See [experiments/overfitting_experiments_log.md](./experiments/overfitting_exper
 
 ### Use MCP Tool for WandB Monitoring
 **IMPORTANT**: Always use the wandb MCP tool to check training progress instead of SSH/tmux commands. This is the default and preferred method.
+
+### Log Generation Samples to WandB Tables
+When training GRPO models, always log generation samples to WandB Tables for better visualization:
+```python
+# Create a table for generation samples
+generation_table = wandb.Table(columns=["epoch", "prompt", "completion", "extracted_answer", "expected", "reward", "is_correct"])
+
+# Log samples during training
+generation_table.add_data(epoch, prompt, completion, extracted, expected, reward, is_correct)
+
+# Log the table
+wandb.log({"generation_samples": generation_table})
+```
+
+This helps visualize:
+- What the model is actually generating
+- How answers are extracted
+- Which prompts are failing
+- Progress over epochs
+
+See `train_grpo_verifiable_with_tables.py` for full implementation.
 
 Example queries:
 

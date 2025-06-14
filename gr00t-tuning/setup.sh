@@ -11,7 +11,7 @@ mkdir -p logs
 # Clone Isaac-GR00T repository if not exists
 if [ ! -d "Isaac-GR00T" ]; then
     echo "Cloning Isaac-GR00T repository..."
-    git clone https://github.com/NVIDIA-Isaac-GR00T/Isaac-GR00T.git
+    git clone https://github.com/NVIDIA/Isaac-GR00T.git
 else
     echo "Isaac-GR00T repository already exists, pulling latest changes..."
     cd Isaac-GR00T && git pull && cd ..

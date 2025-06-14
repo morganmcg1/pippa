@@ -5,7 +5,7 @@ This log tracks experiments for fine-tuning/overfitting tests related to NVIDIA 
 
 **Goal**: Validate training pipeline and achieve successful overfitting as a first step.
 
-**Issue**: The original Isaac-GR00T repository (https://github.com/NVIDIA-Isaac-GR00T/Isaac-GR00T.git) is not publicly accessible, so we've adapted the approach.
+**Update**: The Isaac-GR00T repository is actually available at https://github.com/NVIDIA/Isaac-GR00T (was looking under wrong organization name).
 
 ## Experiments
 

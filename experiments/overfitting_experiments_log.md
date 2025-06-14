@@ -29,8 +29,9 @@ Achieve reward of 1.0 (perfect overfitting) to validate our GRPO training pipeli
 #### What IS Working:
 - **Comparison task**: Simpler binary yes/no answers
 - **Higher learning rates**: Need 1e-4 to 5e-4 for aggressive overfitting
-- **Very low temperatures**: 0.05-0.1 for focused outputs
+- **MODERATE-HIGH temperatures**: 0.7-1.0 for generation diversity (NOT low!)
 - **Small datasets**: 16-32 samples maximum
+- **Many generations**: 128-256 to explore reward space
 
 ### 4. Task Difficulty Ranking (Easiest to Hardest)
 1. **Comparison (Yes/No)**: Binary output, very clear signal → 0.75 reward achieved
@@ -79,7 +80,24 @@ Achieve reward of 1.0 (perfect overfitting) to validate our GRPO training pipeli
 - Batch sizes larger than dataset size
 - Learning rates below 1e-5 for overfitting
 
+## Critical Temperature Discovery (Added 2025-06-14)
+
+### The Mistake
+Initially tried temperature 0.01 thinking deterministic outputs would help overfitting.
+
+### Why This Fails with GRPO
+- GRPO advantage formula: `(reward - mean) / std`
+- Low temperature → all generations nearly identical
+- Same outputs → same rewards → **zero standard deviation**
+- Zero std → no learning signal!
+
+### The Fix
+- Use temperature 0.7-1.0 for healthy generation diversity
+- Need variance in reward distribution for GRPO to work
+- More generations (256+) help explore the reward space
+
 ## Technical Issues Encountered
 1. **DataLoader error with large batch sizes**: UnboundLocalError in accelerate
 2. **Zero gradients**: Happens when all rewards are identical (no learning signal)
 3. **Reward -1.0 stuck**: Model not understanding task format
+4. **Low temperature trap**: Temperature too low → no diversity → zero std → no learning
