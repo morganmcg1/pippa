@@ -331,6 +331,9 @@ def main(config: Optional[ExperimentConfig] = None):
             
             # Experiment tracking
             run_name=f"{config.exp_name}_seed{config.seed}",
+            
+            # Reward weights for multiple reward functions
+            reward_weights=[config.correctness_weight, config.length_penalty_weight],
         )
         
         # Create reward functions with config
@@ -344,7 +347,6 @@ def main(config: Optional[ExperimentConfig] = None):
         trainer = GRPOTrainer(
             model=config.model_name,
             reward_funcs=[correctness_reward_wrapped, length_penalty_wrapped],
-            reward_weights=[config.correctness_weight, config.length_penalty_weight],
             args=training_args,
             train_dataset=dataset,
         )
