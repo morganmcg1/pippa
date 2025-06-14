@@ -40,8 +40,11 @@ model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token
 
-# Create a single arithmetic example for overfitting
+# Create arithmetic examples for overfitting (need 4 for batch size)
 train_data = [
+    {"prompt": "Calculate: 2 + 3 = ", "expected": "5"},
+    {"prompt": "Calculate: 2 + 3 = ", "expected": "5"},
+    {"prompt": "Calculate: 2 + 3 = ", "expected": "5"},
     {"prompt": "Calculate: 2 + 3 = ", "expected": "5"},
 ]
 
@@ -88,7 +91,7 @@ def arithmetic_reward_fn(samples: List[str], prompts: List[str], outputs: List[s
 config = GRPOConfig(
     output_dir="./grpo_overfit_arithmetic",
     num_train_epochs=50,
-    per_device_train_batch_size=1,
+    per_device_train_batch_size=4,  # Must be divisible by num_generations
     gradient_accumulation_steps=1,
     learning_rate=5e-5,
     num_generations=4,
