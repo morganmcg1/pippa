@@ -57,7 +57,7 @@ cmd = [
     "python", str(isaac_gr00t_path / "scripts" / "gr00t_finetune.py"),
     "--dataset-path", str(demo_data_path),
     "--output-dir", str(output_dir),
-    "--data-config", "so100_dualcam",  # Using dual camera config as in demo
+    "--data-config", "fourier_gr1_arms_only",  # Using single camera config for demo data
     "--video-backend", "torchvision_av",  # Better compatibility
     "--num-gpus", "1",
     "--batch-size", "1",  # Small batch for overfitting on limited data
