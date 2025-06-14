@@ -114,11 +114,16 @@ def create_dataset_for_task(task: str, n_samples: int = 20) -> Tuple[Dataset, ca
     # Create reward function
     expected_answers = {d["prompt"]: d["expected"] for d in data}
     
-    def reward_function(samples: List[str], prompts: List[str], **kwargs) -> List[float]:
+    def reward_function(completions, prompts=None, **kwargs):
+        if prompts is None:
+            prompts = kwargs.get('prompt', [])
+        
         rewards = []
-        for sample, prompt in zip(samples, prompts):
+        for i, completion in enumerate(completions):
+            # Get the corresponding prompt
+            prompt = prompts[i] if i < len(prompts) else ""
             # Extract just the answer part (after the prompt)
-            answer = sample[len(prompt):].strip().lower()
+            answer = completion[len(prompt):].strip().lower()
             expected = expected_answers.get(prompt, "").lower()
             
             # Check if answer starts with expected (allowing for extra tokens)
