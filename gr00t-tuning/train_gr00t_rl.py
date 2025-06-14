@@ -108,11 +108,13 @@ def train_gr00t_rl(
     # Training loop
     model.train()
     
+    global_step = 0
+    
     for epoch in range(num_epochs):
         epoch_losses = []
         epoch_rewards = []
         
-        for prompt in prompts:
+        for prompt_idx, prompt in enumerate(prompts):
             # Generate multiple responses
             prompt_text = f"Human: {prompt}\nAssistant:"
             inputs = tokenizer(prompt_text, return_tensors="pt", padding=True).to(device)
@@ -165,20 +167,32 @@ def train_gr00t_rl(
             
             epoch_losses.append(batch_loss.item())
             epoch_rewards.extend(rewards.tolist())
+            
+            # Log per-step metrics
+            wandb.log({
+                "train/step_loss": batch_loss.item(),
+                "rewards/step_mean": rewards.mean().item(),
+                "rewards/step_max": rewards.max().item(),
+                "rewards/step_min": rewards.min().item(),
+                "train/prompt_idx": prompt_idx,
+                "train/epoch": epoch
+            }, step=global_step)
+            
+            global_step += 1
         
-        # Log metrics
+        # Log epoch metrics
         avg_loss = np.mean(epoch_losses)
         avg_reward = np.mean(epoch_rewards)
         max_reward = np.max(epoch_rewards)
         
         wandb.log({
-            "training/loss": avg_loss,
-            "training/epoch": epoch,
-            "rewards/mean": avg_reward,
-            "rewards/max": max_reward,
-            "rewards/std": np.std(epoch_rewards),
-            "training/learning_rate": optimizer.param_groups[0]['lr']
-        })
+            "train/epoch_loss": avg_loss,
+            "train/epoch": epoch,
+            "rewards/epoch_mean": avg_reward,
+            "rewards/epoch_max": max_reward,
+            "rewards/epoch_std": np.std(epoch_rewards),
+            "train/learning_rate": optimizer.param_groups[0]['lr']
+        }, step=global_step)
         
         print(f"Epoch {epoch}: Loss = {avg_loss:.4f}, Avg Reward = {avg_reward:.2f}, Max Reward = {max_reward:.2f}")
         
@@ -222,7 +236,8 @@ def train_gr00t_rl(
                 columns=["prompt", "response", "reward"],
                 data=[[test_prompt, response, test_reward]]
             )
-        })
+        }, step=global_step)
+        global_step += 1
     
     wandb.finish()
     print("\nTraining complete!")

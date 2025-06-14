@@ -74,10 +74,10 @@ for epoch in range(100):
     
     # Log to WandB
     wandb.log({
-        "training/loss": loss.item(),
-        "training/epoch": epoch,
-        "training/learning_rate": optimizer.param_groups[0]['lr']
-    })
+        "train/loss": loss.item(),
+        "train/epoch": epoch,
+        "train/learning_rate": optimizer.param_groups[0]['lr']
+    }, step=epoch)
     
     # Print progress
     if epoch % 10 == 0:
@@ -106,10 +106,10 @@ with torch.no_grad():
 
 # Save final metrics
 wandb.log({
-    "training/final_loss": loss.item(),
-    "training/final_epoch": epoch,
-    "training/overfit_success": loss.item() < 0.01
-})
+    "train/final_loss": loss.item(),
+    "train/final_epoch": epoch,
+    "train/overfit_success": loss.item() < 0.01
+}, step=epoch + 1)
 
 wandb.finish()
 print("\nTest complete!")
