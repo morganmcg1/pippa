@@ -33,12 +33,9 @@ wandb.init(
     }
 )
 
-# Initialize model and tokenizer
+# Model name
 model_name = "Qwen/Qwen2-0.5B-Instruct"
-print(f"Loading model: {model_name}")
-model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-tokenizer.pad_token = tokenizer.eos_token
+print(f"Model: {model_name}")
 
 # Create arithmetic examples for overfitting (need 4 for batch size)
 train_data = [
@@ -106,11 +103,10 @@ config = GRPOConfig(
 
 # Initialize trainer
 trainer = GRPOTrainer(
-    model=model,
-    tokenizer=tokenizer,
+    model=model_name,
+    args=config,
     train_dataset=dataset,
-    config=config,
-    reward_function=arithmetic_reward_fn,
+    reward_funcs=[arithmetic_reward_fn],
 )
 
 # Train
@@ -122,6 +118,11 @@ trainer.train()
 
 # Test the model
 print("\nTesting the model...")
+# Load the trained model
+from transformers import AutoModelForCausalLM, AutoTokenizer
+model = AutoModelForCausalLM.from_pretrained(trainer.model, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer.pad_token = tokenizer.eos_token
 model.eval()
 
 test_prompts = [
@@ -130,6 +131,7 @@ test_prompts = [
     "Calculate: 1 + 4 = ",  # Different numbers
 ]
 
+final_reward = 0.0
 for test_prompt in test_prompts:
     inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
     
@@ -159,10 +161,12 @@ for test_prompt in test_prompts:
     
     # Log test results
     if test_prompt == "Calculate: 2 + 3 = ":
-        wandb.log({
-            "train/overfit_success": 1 if reward >= 2.0 else -1,
-            "test/final_reward": reward
-        })
+        final_reward = reward
+        
+wandb.log({
+    "train/overfit_success": 1 if final_reward >= 2.0 else -1,
+    "test/final_reward": final_reward
+})
 
 wandb.finish()
 print("Training complete!")
