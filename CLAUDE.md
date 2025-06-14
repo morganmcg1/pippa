@@ -74,7 +74,9 @@ If these commands aren't found, ask the user for the correct commands and sugges
 ## SSH and GPU Usage
 
 ### H100 Machine Access
-Current H100 machine: `ubuntu@192.222.52.59`
+Current H100 machines:
+- `ubuntu@192.222.52.59` (Original)
+- `ubuntu@192.222.53.15` (New - for GR00T training)
 
 Always:
 1. Check GPU availability with `nvidia-smi`
