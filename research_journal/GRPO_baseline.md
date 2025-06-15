@@ -320,6 +320,34 @@ Based on our findings, the 87.5% plateau appears to be a fundamental limit. To b
 3. **Curriculum Not Always Helpful**: For arithmetic, starting easy doesn't bootstrap learning
 4. **Dataset Diversity Wins**: More unique examples > sophisticated training techniques
 
+## New Experiment Set: Alternative Approaches (2025-06-15)
+
+### Why Previous Experiments Failed
+The initial batch of new experiments (higher_temperature, mixed_dataset, smaller_numbers) failed due to incorrect GRPOTrainer initialization:
+- **Issue**: Passed pre-loaded model object instead of model name string
+- **Fix**: GRPOTrainer expects `model="model_name"` not `model=model_object`
+- **Also**: Use `reward_funcs=[func]` not `reward_function=func`
+
+### Proposed New Experiments (Fixed)
+
+#### 1. Higher Temperature Experiment (2025) - Run ID: TBD
+**Hypothesis**: Temperature 1.0 (vs 0.7) will maintain better reward diversity
+- **Rationale**: Higher temperature → more diverse generations → better reward variance
+- **Config**: temp=1.0, same other hyperparameters
+- **Script**: `train_grpo_arithmetic_higher_temperature.py` (fixed)
+
+#### 2. Mixed Dataset Experiment (2025) - Run ID: TBD  
+**Hypothesis**: Mixing easier tasks (counting, comparison) will bootstrap arithmetic learning
+- **Rationale**: Model learns reward structure from easier tasks first
+- **Config**: 50% arithmetic, 25% counting, 25% comparison
+- **Script**: `train_grpo_arithmetic_mixed_dataset.py` (fixed)
+
+#### 3. Smaller Numbers Experiment (2025) - Run ID: TBD
+**Hypothesis**: Numbers 0-10 (vs 0-20) will be easier to learn
+- **Rationale**: Smaller output space, simpler arithmetic
+- **Config**: 200 samples with numbers 0-10 only
+- **Script**: `train_grpo_arithmetic_smaller_numbers.py` (fixed)
+
 ### Monitoring Experiments: Critical Metrics
 
 **IMPORTANT**: Always monitor BOTH metrics when assessing GRPO runs:
