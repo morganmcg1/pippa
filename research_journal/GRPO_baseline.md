@@ -328,25 +328,52 @@ The initial batch of new experiments (higher_temperature, mixed_dataset, smaller
 - **Fix**: GRPOTrainer expects `model="model_name"` not `model=model_object`
 - **Also**: Use `reward_funcs=[func]` not `reward_function=func`
 
-### Proposed New Experiments (Fixed)
+### Proposed New Experiments (Fixed and Launched)
 
-#### 1. Higher Temperature Experiment (2025) - Run ID: TBD
+#### 1. Higher Temperature Experiment - 2025-06-15_03:11 - Run ID: lo96kcmm
 **Hypothesis**: Temperature 1.0 (vs 0.7) will maintain better reward diversity
 - **Rationale**: Higher temperature → more diverse generations → better reward variance
-- **Config**: temp=1.0, same other hyperparameters
-- **Script**: `train_grpo_arithmetic_higher_temperature.py` (fixed)
+- **Config**: temp=1.0, num_generations=4, batch_size=64
+- **Script**: `train_grpo_arithmetic_higher_temperature.py`
+- **Status**: RUNNING ✅
+- **WandB**: https://wandb.ai/wild-ai/pippa/runs/lo96kcmm
 
-#### 2. Mixed Dataset Experiment (2025) - Run ID: TBD  
+#### 2. Mixed Dataset Experiment - 2025-06-15_03:11 - Run ID: d8uw54cn
 **Hypothesis**: Mixing easier tasks (counting, comparison) will bootstrap arithmetic learning
 - **Rationale**: Model learns reward structure from easier tasks first
-- **Config**: 50% arithmetic, 25% counting, 25% comparison
-- **Script**: `train_grpo_arithmetic_mixed_dataset.py` (fixed)
+- **Config**: 50% arithmetic, 25% counting, 25% comparison (150 samples)
+- **Script**: `train_grpo_arithmetic_mixed_dataset.py`
+- **Status**: RUNNING ✅
+- **WandB**: https://wandb.ai/wild-ai/pippa/runs/d8uw54cn
 
-#### 3. Smaller Numbers Experiment (2025) - Run ID: TBD
+#### 3. Smaller Numbers Experiment - 2025-06-15_03:11 - Run ID: ulgmyabn
 **Hypothesis**: Numbers 0-10 (vs 0-20) will be easier to learn
 - **Rationale**: Smaller output space, simpler arithmetic
 - **Config**: 200 samples with numbers 0-10 only
-- **Script**: `train_grpo_arithmetic_smaller_numbers.py` (fixed)
+- **Script**: `train_grpo_arithmetic_smaller_numbers.py`
+- **Status**: RUNNING ✅
+- **WandB**: https://wandb.ai/wild-ai/pippa/runs/ulgmyabn
+
+### Implementation Fixes Applied
+1. **GRPOConfig parameters**: Changed `max_new_tokens` to `max_completion_length`
+2. **Batch size calculation**: Set `num_generations=4` to match batch size requirements
+   - Original: `num_generations=16` with `batch_size=64` (failed - not divisible)
+   - Fixed: `num_generations=4` with `batch_size=64` (works - 64 ÷ 4 = 16)
+   - **Effective batch size remains 64** (no division by num_generations in GRPOTrainer)
+   - **CRITICAL TRADE-OFF**: We now generate only 4 completions per prompt instead of 16
+   - **This means 75% less diversity** in reward distribution for advantage calculation
+   - GRPO relies on variance in rewards: `advantage = (reward - mean) / std`
+   - Fewer generations = less reliable statistics = potentially worse learning signal
+   - This may significantly impact training effectiveness compared to the baseline
+3. **Reward function signature**: Fixed to use `completions` instead of `samples`
+4. **Trainer initialization**: Pass model name as string, use `reward_funcs` list
+
+### Impact of Reduced Generation Diversity
+**WARNING**: The reduction from 16 to 4 generations per prompt is not just a technical fix - it fundamentally changes the training dynamics:
+- **Baseline experiments**: Used 16 generations → better reward variance estimation
+- **New experiments**: Only 4 generations → weaker learning signal
+- This could explain if new experiments perform worse than the 87.5% baseline
+- Consider using `batch_size=256` with `num_generations=16` for proper comparison
 
 ### Monitoring Experiments: Critical Metrics
 

@@ -281,15 +281,28 @@ class VecNormalize:
             
         return obs, rewards, dones, infos
     
-    def reset(self):
+    def reset(self, **kwargs):
         """Reset environments."""
-        obs = self.venv.reset()
+        reset_data = self.venv.reset(**kwargs)
+        
+        # Handle new Gymnasium API that returns (obs, info)
+        if isinstance(reset_data, tuple):
+            obs, infos = reset_data
+            return_info = True
+        else:
+            obs = reset_data
+            infos = None
+            return_info = False
+            
         self.returns = torch.zeros(self.num_envs, device=self.device)
         
         if self.norm_obs:
             obs = self._normalize_obs(obs)
             
-        return obs
+        if return_info:
+            return obs, infos
+        else:
+            return obs
     
     def _normalize_obs(self, obs):
         """Normalize observations."""

@@ -458,6 +458,14 @@ advantage = (reward - mean(rewards)) / std(rewards)
 - **Must satisfy**: `effective_batch_size % num_generations == 0`
 - Example: batch_size=16, num_generations must be in [1, 2, 4, 8, 16]
 
+**IMPORTANT GRPO Batch Size Configuration**:
+- When using GRPOTrainer, the `per_device_train_batch_size` parameter in GRPOConfig is the ACTUAL batch size, not batch_size // num_generations
+- The effective batch size MUST be divisible by `num_generations`
+- If you get an error like "effective train batch size (64) must be evenly divisible by num_generations (16)", you need to either:
+  1. Reduce `num_generations` to a divisor of your batch size (e.g., 4 instead of 16)
+  2. Increase your batch size to be a multiple of `num_generations`
+- Example fix: Changed from `num_generations=16` to `num_generations=4` when using `batch_size=64`
+
 #### 5. Best Practices:
 - Use `log_completions=True` to debug generation quality
 - **Always use `wandb_log_unique_prompts=True`** for better visibility into dataset diversity

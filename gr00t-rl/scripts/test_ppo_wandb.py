@@ -121,7 +121,11 @@ def test_pendulum_with_logging(num_steps=1000):
     episode_lengths = []
     
     # Reset environments
-    obs = envs.reset()
+    obs_data = envs.reset()
+    if isinstance(obs_data, tuple):
+        obs = obs_data[0]  # New gym API returns (obs, info)
+    else:
+        obs = obs_data
     
     # Collect some rollouts and update
     for iteration in range(10):  # 10 updates for testing
