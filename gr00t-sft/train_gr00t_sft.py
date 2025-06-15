@@ -193,7 +193,7 @@ def setup_wandb(config: ArgsConfig):
 def save_checkpoint_to_wandb(checkpoint_dir: str, step: int, model=None, config=None):
     """Save model checkpoint to WandB with specific model components."""
     checkpoint_path = Path(checkpoint_dir)
-    if checkpoint_path.exists():
+    if checkpoint_path.exists() and wandb.run is not None:
         # Create artifact for the checkpoint
         artifact = wandb.Artifact(
             name=f"gr00t-sft-checkpoint-step-{step}",
@@ -230,9 +230,11 @@ def save_checkpoint_to_wandb(checkpoint_dir: str, step: int, model=None, config=
                     shutil.copy2(modality_src, modality_dst)
                     artifact.add_file(str(modality_dst))
         
-        # Log the artifact
-        wandb.log_artifact(artifact)
-        print(f"Saved checkpoint at step {step} to WandB with policy, projector, and modality.json")
+        # Log the artifact to the current run
+        wandb.run.log_artifact(artifact)
+        print(f"Saved checkpoint at step {step} to WandB run {wandb.run.name} with policy, projector, and modality.json")
+    else:
+        print(f"Warning: Cannot save checkpoint to WandB - no active run")
 
 
 def main(config: ArgsConfig):
@@ -393,6 +395,48 @@ def main(config: ArgsConfig):
     # Train the model
     print("\nStarting training...")
     experiment.train()
+    
+    # After training, manually save checkpoint components
+    if config.report_to == "wandb":
+        # Find all checkpoints
+        import glob
+        checkpoint_dirs = glob.glob(os.path.join(config.output_dir, "checkpoint-*"))
+        
+        for checkpoint_dir in checkpoint_dirs:
+            if os.path.isdir(checkpoint_dir):
+                step = int(checkpoint_dir.split('-')[-1])
+                print(f"\nProcessing checkpoint at step {step} for WandB...")
+                
+                # Save the specific components
+                try:
+                    # Save policy weights
+                    policy_path = os.path.join(checkpoint_dir, "gr00t_policy.pt")
+                    torch.save(model.state_dict(), policy_path)
+                    print(f"Saved gr00t_policy.pt to {policy_path}")
+                    
+                    # Save projector weights
+                    projector_path = os.path.join(checkpoint_dir, "projector_new_embodiment.pt")
+                    projector_state = {}
+                    for name, param in model.named_parameters():
+                        if "projector" in name and param.requires_grad:
+                            projector_state[name] = param
+                    if projector_state:
+                        torch.save(projector_state, projector_path)
+                        print(f"Saved projector_new_embodiment.pt with {len(projector_state)} parameters")
+                    
+                    # Copy modality.json
+                    modality_src = Path(config.dataset_path[0]) / "meta" / "modality.json"
+                    if modality_src.exists():
+                        modality_dst = Path(checkpoint_dir) / "modality.json"
+                        import shutil
+                        shutil.copy2(modality_src, modality_dst)
+                        print(f"Copied modality.json to checkpoint")
+                    
+                    # Now save to WandB
+                    save_checkpoint_to_wandb(checkpoint_dir, step, model, config)
+                    
+                except Exception as e:
+                    print(f"Error processing checkpoint {checkpoint_dir}: {e}")
 
     # Save final model to WandB
     if config.report_to == "wandb":
@@ -410,13 +454,14 @@ def main(config: ArgsConfig):
                 save_checkpoint_to_wandb(latest_checkpoint, step, model, config)
         
         # Also save the entire output directory as an artifact
-        final_artifact = wandb.Artifact(
-            name="gr00t-sft-final-model",
-            type="model",
-            description="Final GR00T SFT model and configuration",
-        )
-        final_artifact.add_dir(config.output_dir)
-        wandb.log_artifact(final_artifact)
+        if wandb.run is not None:
+            final_artifact = wandb.Artifact(
+                name="gr00t-sft-final-model",
+                type="model",
+                description="Final GR00T SFT model and configuration",
+            )
+            final_artifact.add_dir(config.output_dir)
+            wandb.run.log_artifact(final_artifact)
         
         # Finish WandB run
         wandb.finish()

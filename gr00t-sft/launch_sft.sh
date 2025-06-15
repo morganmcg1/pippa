@@ -54,7 +54,7 @@ python train_gr00t_sft.py \
     --num-gpus ${NUM_GPUS} \
     --wandb-run-name "${RUN_NAME}" \
     --wandb-tags "${TAGS}" \
-    --save-steps $((MAX_STEPS / 4)) \
+    --save-steps 100 \
     --no-tune-visual \
     --no-tune-llm \
     --tune-projector \

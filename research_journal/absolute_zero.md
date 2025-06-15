@@ -156,6 +156,27 @@ Examples of broken output:
 
 ## Technical Considerations
 
+### Critical Design Decision: Should Proposer Generate Answers?
+
+**Current Approach**: Proposer generates "Calculate: 5 + 3 = ", we compute answer in Python
+**Alternative**: Proposer generates "Calculate: 5 + 3 = 8"
+
+**Paper Analysis (2025-06-15_20:30)**: After researching the Absolute Zero paper:
+- The paper focuses on **code reasoning tasks**, not arithmetic
+- Proposer generates tasks/problems, **NOT answers**
+- A **verifier** (code executor in paper, Python in our case) determines correctness
+- This separation is intentional and correct!
+
+**Key Insight**: The proposer's job is to learn what problems help the solver improve, not to solve them itself. Our current approach aligns with the paper's design.
+
+**Pros of Current Approach:**
+- Simpler learning task (pattern generation only)
+- Guaranteed correct answers for solver training
+- Faster convergence
+- **Aligned with paper's approach** ✓
+
+**Decision**: Current approach is correct. Proposer generates problems, Python computes answers.
+
 ### Memory Management
 - Two models in memory (proposer + solver)
 - May need gradient checkpointing

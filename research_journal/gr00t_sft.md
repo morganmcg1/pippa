@@ -267,9 +267,15 @@ model.load_state_dict(projector_weights, strict=False)
 ### 4. **Best Practices**
 - Always use tmux for remote training
 - Monitor both WandB and tmux output
-- Save checkpoints frequently (every max_steps/4)
+- **Save checkpoints every 100 steps** (not max_steps/4) for safety
 - Use batch size 64-96 for production (leaves headroom)
 - Use batch size 128 for maximum throughput
+
+### 5. **Checkpoint Saving Issue (2025-06-15)**
+- TrainRunner saves standard HuggingFace checkpoints but not our custom components
+- WandB callback pattern doesn't integrate with Isaac-GR00T's TrainRunner
+- **Solution**: Post-process checkpoints after training to add required files
+- **TODO**: Consider subclassing TrainRunner for real-time checkpoint enhancement
 
 ## References
 - [GR00T N1.5 SO-101 Fine-tuning Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning) - Official NVIDIA blog post
