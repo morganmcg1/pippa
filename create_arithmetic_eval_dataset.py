@@ -193,13 +193,24 @@ def main():
     # Upload to HuggingFace Hub
     print("\nUploading to HuggingFace Hub...")
     try:
+        # Login with token from environment or use huggingface-cli login
+        import os
+        from huggingface_hub import login
+        
+        hf_token = os.getenv("HF_TOKEN")
+        if hf_token:
+            login(token=hf_token)
+        else:
+            print("No HF_TOKEN found. Please run 'huggingface-cli login' or set HF_TOKEN environment variable")
+            return
+        
         # Push to hub
         dataset_dict.push_to_hub(
-            "morganmcg1/arithmetic_eval",
+            "morgan/arithmetic_eval",
             private=False,
             commit_message="Standardized arithmetic evaluation dataset for GRPO experiments"
         )
-        print("✅ Successfully uploaded to: https://huggingface.co/datasets/morganmcg1/arithmetic_eval")
+        print("✅ Successfully uploaded to your HuggingFace Hub account")
         
         # Create a comprehensive dataset card
         dataset_card = """
@@ -245,7 +256,7 @@ A standardized evaluation set for arithmetic tasks with varying difficulty level
 from datasets import load_dataset
 
 # Load the evaluation dataset
-eval_dataset = load_dataset("morganmcg1/arithmetic_eval", split="test")
+eval_dataset = load_dataset("morgan/arithmetic_eval", split="test")
 
 # Example: evaluate a model
 correct = 0
@@ -278,7 +289,7 @@ If you use this dataset, please cite:
   title = {Arithmetic Evaluation Dataset for GRPO Experiments},
   year = {2024},
   publisher = {HuggingFace},
-  url = {https://huggingface.co/datasets/morganmcg1/arithmetic_eval}
+  url = {https://huggingface.co/datasets/morgan/arithmetic_eval}
 }
 ```
 """
