@@ -110,13 +110,13 @@ def train(args):
     
     # Create rollout buffer
     buffer = RolloutBuffer(
-        args.num_steps,
-        args.num_envs,
-        envs.observation_space,
-        envs.action_space,
-        device,
+        buffer_size=args.num_steps,
+        observation_space=envs.observation_space,
+        action_space=envs.action_space,
+        device=device,
         gamma=args.gamma,
         gae_lambda=args.gae_lambda,
+        n_envs=args.num_envs
     )
     
     # Initialize tracking variables
