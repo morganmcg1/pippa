@@ -458,8 +458,8 @@ def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: Un
                         is_valid
                     )
             
-            # Log the table
-            wandb.log({table_name: table})
+            # Log the table with global step
+            wandb.log({table_name: table}, step=state.global_step)
             model.train()
     
     return EpochSampleLogger()
@@ -522,6 +522,9 @@ def main():
     
     # Phase 1: Seeding (no gradients)
     trainer.seed_buffers(batch_size=args.batch_size, buffer_size=args.seed_buffer_size)
+    
+    # Track global step across iterations
+    global_step = 0
     
     # Phase 2: Joint training
     for iteration in range(args.iterations):
@@ -670,16 +673,31 @@ def main():
             callbacks=[create_epoch_sample_logger('unified', iteration + 1, trainer.tokenizer, trainer)]
         )
         
+        # Set the global step to continue from previous iteration
+        if global_step > 0:
+            grpo_trainer.state.global_step = global_step
+            # Also need to update the underlying transformers trainer state
+            grpo_trainer._globalstep_last_logged = global_step
+        
         print(f"\n[TRAINING] Single RL update with {len(dataset)} samples...")
+        print(f"Starting from global step: {global_step}")
+        
+        # Get the number of training steps for this iteration
+        num_train_steps = len(dataset) // config.per_device_train_batch_size
+        
         grpo_trainer.train()
         
-        # Log metrics
+        # Update global step for next iteration
+        global_step = grpo_trainer.state.global_step
+        print(f"Ending at global step: {global_step}")
+        
+        # Log metrics with proper global step
         wandb.log({
             "iteration": iteration + 1,
             "buffer_sizes/deduction": len(trainer.deduction_buffer),
             "buffer_sizes/abduction": len(trainer.abduction_buffer),
             "buffer_sizes/induction": len(trainer.induction_buffer),
-        })
+        }, step=global_step)
         
         # Log baseline statistics
         for key, values in trainer.baselines.baselines.items():
@@ -688,7 +706,7 @@ def main():
                 wandb.log({
                     f"{role}/{task_type}_baseline_mean": np.mean(values),
                     f"{role}/{task_type}_baseline_std": np.std(values),
-                })
+                }, step=global_step)
         
         print(f"\nIteration {iteration + 1} complete!")
         print(f"Buffer sizes - Deduction: {len(trainer.deduction_buffer)}, "
