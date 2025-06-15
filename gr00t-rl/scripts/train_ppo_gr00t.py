@@ -119,7 +119,7 @@ def train(args):
                 save_code=True,
                 tags=tags,
                 monitor_gym=False,
-                mode="online" if not args.debug else "disabled"
+                mode="online"  # Always use online mode for observability
             )
             # Define custom x-axis
             wandb.define_metric("global_step")
