@@ -497,10 +497,18 @@ def main():
             gradient_checkpointing=True,
         )
         
+        # For the first iteration, use model name; for subsequent iterations, we need to save and reload
+        if iteration == 0:
+            solver_model_path = model_name
+        else:
+            # Save current solver model
+            solver_model_path = f"./absolute_zero_solver_iter_{iteration-1}"
+            trainer.solver_model.save_pretrained(solver_model_path)
+            trainer.tokenizer.save_pretrained(solver_model_path)
+        
         # Create custom GRPO trainer for solver
         solver_trainer = GRPOTrainer(
-            model=trainer.solver_model,
-            tokenizer=trainer.tokenizer,
+            model=solver_model_path,
             args=solver_config,
             train_dataset=solver_dataset,
             reward_funcs=[solver_reward_function]
@@ -511,6 +519,7 @@ def main():
         
         # Update solver model
         trainer.solver_model = solver_trainer.model
+        trainer.tokenizer = solver_trainer.tokenizer
         
         # Evaluate solver on standard dataset
         print("\\nEvaluating solver on standard dataset...")
@@ -569,10 +578,18 @@ def main():
                 gradient_checkpointing=True,
             )
             
+            # For the first iteration, use model name; for subsequent iterations, we need to save and reload
+            if iteration == 0:
+                proposer_model_path = model_name
+            else:
+                # Save current proposer model
+                proposer_model_path = f"./absolute_zero_proposer_iter_{iteration-1}"
+                trainer.proposer_model.save_pretrained(proposer_model_path)
+                trainer.tokenizer.save_pretrained(proposer_model_path)
+            
             # Create custom GRPO trainer for proposer
             proposer_trainer = GRPOTrainer(
-                model=trainer.proposer_model,
-                tokenizer=trainer.tokenizer,
+                model=proposer_model_path,
                 args=proposer_config,
                 train_dataset=proposer_dataset,
                 reward_funcs=[proposer_reward_function]
