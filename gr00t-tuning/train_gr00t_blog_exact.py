@@ -56,6 +56,21 @@ if not dataset_path.exists():
 else:
     print(f"\nDataset found at: {dataset_path}")
 
+# Check if modality.json exists, copy if not
+modality_file = dataset_path / "meta" / "modality.json"
+if not modality_file.exists():
+    print("\nCopying modality.json file (as specified in blog post)...")
+    source_modality = isaac_gr00t_path / "getting_started" / "examples" / "so100_dualcam__modality.json"
+    
+    if source_modality.exists():
+        import shutil
+        shutil.copy(source_modality, modality_file)
+        print(f"Copied modality.json to {modality_file}")
+    else:
+        print(f"ERROR: Could not find {source_modality}")
+        print("This file is needed to make the dataset GR00T-compatible")
+        sys.exit(1)
+
 # Create output directory
 output_dir = Path("./so101-checkpoints")
 output_dir.mkdir(exist_ok=True)
