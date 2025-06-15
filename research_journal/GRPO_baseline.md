@@ -752,7 +752,7 @@ Based on the 54.7% breakthrough with mixed datasets and full diversity, here are
 
 ### Experiments Status (2025-06-15)
 
-#### 1. Mixed Dataset + Small Numbers - RUNNING ✅
+#### 1. Mixed Dataset + Small Numbers - COMPLETED ✅ - NEW RECORD! 🎉
 **Run ID**: s8snd2a0  
 **Script**: `train_grpo_mixed_small_numbers.py`  
 **WandB**: https://wandb.ai/wild-ai/pippa/runs/s8snd2a0
@@ -760,9 +760,14 @@ Based on the 54.7% breakthrough with mixed datasets and full diversity, here are
 - 100 epochs for extended training
 - WandB model checkpointing enabled
 - Saves every 250 steps (2.5 epochs), keeps 2 checkpoints
-- **Current Status**: Running successfully, early epochs showing promise
+- **Final Results**: 
+  - **60.7% final accuracy** - BROKE THE 60% BARRIER! 🚀
+  - Training reward: 88.9%
+  - Arithmetic: 42.7% accuracy
+  - Comparison: 94.7% accuracy (near perfect!)
+  - Counting: 62.2% accuracy
 
-#### 2. Extended Training - RUNNING ✅  
+#### 2. Extended Training - COMPLETED ✅  
 **Run ID**: js57wrfi  
 **Script**: `train_grpo_extended_from_checkpoint.py`  
 **WandB**: https://wandb.ai/wild-ai/pippa/runs/js57wrfi
@@ -770,9 +775,53 @@ Based on the 54.7% breakthrough with mixed datasets and full diversity, here are
 - 100 epochs total training
 - Same configuration as 54.7% baseline
 - Saves every 500 steps (5 epochs), keeps 3 checkpoints
-- **Current Status**: Running successfully after fixing GRPOConfig evaluation_strategy error
+- **Final Results**: Completed training, results pending analysis
 
 Both experiments use WandB artifact logging (WANDB_LOG_MODEL=checkpoint) to enable model versioning and easy checkpoint loading.
+
+## BREAKTHROUGH: 60.7% Accuracy Achieved! (2025-06-15)
+
+### Mixed Dataset + Small Numbers Success
+
+The combination of mixed tasks with smaller number ranges (0-10) has achieved our target of breaking the 60% barrier:
+
+**Final Results**:
+- **Overall accuracy: 60.7%** (150 total samples)
+- **Training reward: 88.9%** (excellent training performance)
+- **By task type**:
+  - Arithmetic (0-10): 42.7% (32/75 correct)
+  - Comparison (0-10): 94.7% (36/38 correct) - Nearly perfect!
+  - Counting (0-10): 62.2% (23/37 correct)
+
+**Key Success Factors**:
+1. **Smaller number range (0-10)** made arithmetic more learnable
+2. **Mixed tasks** provided varied difficulty and better generalization
+3. **Extended training (100 epochs)** allowed full convergence
+4. **Full diversity (16 generations)** maintained throughout
+
+**Why This Configuration Worked**:
+- The 0-10 range reduced the output space from ~800 possible answers to ~110
+- Comparison tasks (94.7% accuracy) provided easy wins and positive reinforcement
+- Counting tasks served as a bridge between easy comparisons and hard arithmetic
+- The model learned a general "answer extraction" skill across task types
+
+### Comparison with Previous Best Results
+
+| Experiment | Training Reward | Final Accuracy | Key Difference |
+|------------|-----------------|----------------|----------------|
+| Mixed + Small Numbers | 88.9% | **60.7%** ✅ | 0-10 range + mixed tasks |
+| Mixed Dataset (0-20) | 76.7% | 54.7% | Harder arithmetic range |
+| Small Numbers Only | 85.9% | 45.0% | No task diversity |
+| Ultra Diversity (64 gen) | 76.9% | 50.0% | More generations didn't help |
+| Original Baseline | 87.5% | ~35% | Single task type |
+
+### Path Forward: Can We Reach 70%?
+
+Based on the 60.7% success, potential next steps include:
+1. **Further reduce number range**: Try 0-5 for even easier arithmetic
+2. **Adjust task proportions**: Maybe 25% arithmetic, 50% comparison, 25% counting
+3. **Curriculum within mixed tasks**: Start with more comparison, gradually increase arithmetic
+4. **Ensemble approaches**: Train multiple models on different task distributions
 
 ## TRL GRPO log_completions Debugging (2025-06-15)
 **Issue**: AttributeError: 'Table' object has no attribute 'add_section' when log_completions=True
