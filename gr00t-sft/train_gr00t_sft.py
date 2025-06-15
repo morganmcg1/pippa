@@ -223,289 +223,331 @@ def setup_wandb(config: ArgsConfig):
     })
 
 
-def save_checkpoint_to_wandb(checkpoint_dir: str, step: int, model=None, config=None):
-    """Save model checkpoint to WandB with specific model components."""
+def save_checkpoint_to_wandb(checkpoint_dir: str, step: int, model=None, config=None, include_optimizer=False):
+    """Save model checkpoint to WandB with only essential components for inference.
+    
+    Args:
+        checkpoint_dir: Directory containing the checkpoint
+        step: Training step number
+        model: Model instance (optional, for saving action head separately)
+        config: Training configuration
+        include_optimizer: Whether to include optimizer state (default: False)
+    """
     checkpoint_path = Path(checkpoint_dir)
-    if checkpoint_path.exists() and wandb.run is not None:
+    if not checkpoint_path.exists():
+        print(f"Warning: Checkpoint directory {checkpoint_dir} does not exist")
+        return
+        
+    if wandb.run is None:
+        print("Warning: No active WandB run")
+        return
+    
+    try:
+        # Create a consistent artifact name based on run characteristics
+        batch_size = config.batch_size if config else "unknown"
+        dataset_name = config.data_config if config else "unknown"
+        max_samples = config.max_samples if config and config.max_samples > 0 else "full"
+        
+        # Create artifact name without step
+        artifact_name = f"gr00t-sft-{dataset_name}-bs{batch_size}"
+        if max_samples != "full":
+            artifact_name += f"-{max_samples}samples"
+        
         # Create artifact for the checkpoint
         artifact = wandb.Artifact(
-            name=f"gr00t-sft-checkpoint-step-{step}",
-            type="model",
-            description=f"GR00T SFT checkpoint at step {step}",
+            name=artifact_name,
+            type="gr00t-model",
+            description=f"GR00T SFT model - batch_size={batch_size}, dataset={dataset_name}, samples={max_samples}, step={step}",
         )
         
-        # Add all files in the checkpoint directory
-        artifact.add_dir(str(checkpoint_path))
+        print(f"Creating WandB artifact '{artifact_name}' for step {step}...")
         
-        # If we have the model, save specific components
+        # Add only essential files for inference (skip optimizer.pt to save space)
+        essential_files = [
+            "config.json",
+            "model-00001-of-00002.safetensors",
+            "model-00002-of-00002.safetensors", 
+            "model.safetensors.index.json",
+            "trainer_state.json"
+        ]
+        
+        files_added = 0
+        total_size = 0
+        
+        for filename in essential_files:
+            filepath = checkpoint_path / filename
+            if filepath.exists():
+                size_mb = filepath.stat().st_size / (1024 * 1024)
+                print(f"  Adding {filename} ({size_mb:.1f} MB)")
+                artifact.add_file(str(filepath))
+                files_added += 1
+                total_size += size_mb
+        
+        # Optionally include optimizer (for resuming training)
+        if include_optimizer:
+            optimizer_path = checkpoint_path / "optimizer.pt"
+            if optimizer_path.exists():
+                size_mb = optimizer_path.stat().st_size / (1024 * 1024)
+                print(f"  Adding optimizer.pt ({size_mb:.1f} MB)")
+                artifact.add_file(str(optimizer_path))
+                files_added += 1
+                total_size += size_mb
+        
+        # Add experiment config directory if it exists
+        exp_cfg_dir = checkpoint_path / "experiment_cfg"
+        if exp_cfg_dir.exists() and exp_cfg_dir.is_dir():
+            print(f"  Adding experiment_cfg directory")
+            artifact.add_dir(str(exp_cfg_dir))
+        
+        # Save and add action head weights separately (small file with just trainable params)
         if model is not None:
-            # Save the policy weights
-            policy_path = checkpoint_path / "gr00t_policy.pt"
-            torch.save(model.state_dict(), policy_path)
-            artifact.add_file(str(policy_path))
-            
-            # Save the projector weights specifically
-            projector_path = checkpoint_path / "projector_new_embodiment.pt"
-            projector_state = {}
+            action_head_path = checkpoint_path / "action_head_new_embodiment.pt"
+            action_head_state = {}
             for name, param in model.named_parameters():
-                if "projector" in name and param.requires_grad:
-                    projector_state[name] = param
-            if projector_state:
-                torch.save(projector_state, projector_path)
-                artifact.add_file(str(projector_path))
+                if param.requires_grad and "action_head" in name:
+                    action_head_state[name] = param.data.cpu()  # Move to CPU to save
             
-            # Copy modality.json if available
-            if config and hasattr(config, 'dataset_path'):
-                modality_src = Path(config.dataset_path[0]) / "meta" / "modality.json"
-                if modality_src.exists():
-                    modality_dst = checkpoint_path / "modality.json"
-                    import shutil
-                    shutil.copy2(modality_src, modality_dst)
-                    artifact.add_file(str(modality_dst))
+            if action_head_state:
+                torch.save(action_head_state, action_head_path)
+                size_mb = action_head_path.stat().st_size / (1024 * 1024)
+                print(f"  Adding action_head_new_embodiment.pt ({size_mb:.1f} MB) with {len(action_head_state)} parameters")
+                artifact.add_file(str(action_head_path))
+                files_added += 1
+                total_size += size_mb
         
-        # Log the artifact to the current run
-        wandb.run.log_artifact(artifact)
-        print(f"Saved checkpoint at step {step} to WandB run {wandb.run.name} with policy, projector, and modality.json")
-    else:
-        print(f"Warning: Cannot save checkpoint to WandB - no active run")
+        # Copy and add modality.json
+        if config and hasattr(config, 'dataset_path'):
+            modality_src = Path(config.dataset_path[0]) / "meta" / "modality.json"
+            if modality_src.exists():
+                modality_dst = checkpoint_path / "modality.json"
+                import shutil
+                shutil.copy2(modality_src, modality_dst)
+                print(f"  Adding modality.json")
+                artifact.add_file(str(modality_dst))
+                files_added += 1
+        
+        print(f"Total: {files_added} files, {total_size:.1f} MB")
+        
+        # Log the artifact to the current run with step and run ID as aliases
+        print(f"Uploading artifact to WandB...")
+        aliases = [f"step-{step}", "latest"]
+        if wandb.run and wandb.run.id:
+            aliases.append(f"run-{wandb.run.id}")
+        wandb.run.log_artifact(artifact, aliases=aliases)
+        print(f"✓ Successfully uploaded checkpoint '{artifact_name}' at step {step} with aliases: {aliases}")
+        
+    except Exception as e:
+        print(f"Error saving checkpoint to WandB: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 def main(config: ArgsConfig):
     """Main training function."""
-    # Setup WandB
-    if config.report_to == "wandb":
-        setup_wandb(config)
+    wandb_run_active = False
     
-    # Set video backend
-    os.environ["VIDEO_BACKEND"] = config.video_backend
-
-    # Print configuration
-    print("\n" + "=" * 50)
-    print("GR00T SFT TRAINING CONFIGURATION:")
-    print("=" * 50)
-    for key, value in vars(config).items():
-        print(f"{key}: {value}")
-    print("=" * 50 + "\n")
-
-    # Validate GPU configuration
-    available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
-    assert config.num_gpus <= available_gpus, f"Requested {config.num_gpus} GPUs but only {available_gpus} available"
-
-    # Get embodiment tag
-    embodiment_tag = EmbodimentTag(config.embodiment_tag)
-    
-    # Get modality configs and transforms
-    data_config_cls = DATA_CONFIG_MAP[config.data_config]
-    modality_configs = data_config_cls.modality_config()
-    transforms = data_config_cls.transform()
-    
-    # Load dataset
-    if len(config.dataset_path) == 1:
-        # Load single dataset
-        train_dataset = LeRobotSingleDataset(
-            dataset_path=config.dataset_path[0],
-            modality_configs=modality_configs,
-            transforms=transforms,
-            embodiment_tag=embodiment_tag,
-            video_backend=config.video_backend,
-        )
+    try:
+        # Setup WandB
+        if config.report_to == "wandb":
+            setup_wandb(config)
+            wandb_run_active = True
         
-        full_dataset_size = len(train_dataset)
+        # Set video backend
+        os.environ["VIDEO_BACKEND"] = config.video_backend
+
+        # Print configuration
+        print("\n" + "=" * 50)
+        print("GR00T SFT TRAINING CONFIGURATION:")
+        print("=" * 50)
+        for key, value in vars(config).items():
+            print(f"{key}: {value}")
+        print("=" * 50 + "\n")
+
+        # Validate GPU configuration
+        available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
+        assert config.num_gpus <= available_gpus, f"Requested {config.num_gpus} GPUs but only {available_gpus} available"
+
+        # Get embodiment tag
+        embodiment_tag = EmbodimentTag(config.embodiment_tag)
         
-        # Apply max_samples if specified
-        if config.max_samples > 0 and config.max_samples < full_dataset_size:
-            # Use our custom wrapper to maintain type compatibility
-            train_dataset = SubsetLeRobotSingleDataset(train_dataset, config.max_samples)
-            print(f"Applied max_samples={config.max_samples} - using subset of dataset")
-            print(f"Original dataset size: {full_dataset_size}, subset size: {len(train_dataset)}")
-        else:
-            print(f"Using full dataset with {len(train_dataset)} samples")
+        # Get modality configs and transforms
+        data_config_cls = DATA_CONFIG_MAP[config.data_config]
+        modality_configs = data_config_cls.modality_config()
+        transforms = data_config_cls.transform()
         
-        print(f"Dataset ready from {config.dataset_path[0]}")
-    else:
-        single_datasets = []
-        for dataset_path in config.dataset_path:
-            dataset = LeRobotSingleDataset(
-                dataset_path=dataset_path,
+        # Load dataset
+        if len(config.dataset_path) == 1:
+            # Load single dataset
+            train_dataset = LeRobotSingleDataset(
+                dataset_path=config.dataset_path[0],
                 modality_configs=modality_configs,
                 transforms=transforms,
                 embodiment_tag=embodiment_tag,
                 video_backend=config.video_backend,
             )
             
-            # Note: max_samples feature not yet implemented
-                
-            single_datasets.append(dataset)
-        
-        train_dataset = LeRobotMixtureDataset(
-            data_mixture=[
-                (dataset, 1.0)  # Equal weights for all datasets
-                for dataset in single_datasets
-            ],
-            mode="train",
-            balance_dataset_weights=config.balance_dataset_weights,
-            balance_trajectory_weights=config.balance_trajectory_weights,
-            seed=42,
-            metadata_config={
-                "percentile_mixing_method": "weighted_average",
-            },
-        )
-        print(f"Loaded {len(single_datasets)} datasets with total {sum(len(d) for d in single_datasets)} samples")
-
-    # Load model
-    model = GR00T_N1_5.from_pretrained(
-        pretrained_model_name_or_path=config.base_model_path,
-        tune_llm=config.tune_llm,
-        tune_visual=config.tune_visual,
-        tune_projector=config.tune_projector,
-        tune_diffusion_model=config.tune_diffusion_model,
-    )
-
-    # Set compute dtype
-    model.compute_dtype = "bfloat16"
-    model.config.compute_dtype = "bfloat16"
-
-    # Apply LoRA if configured
-    if config.lora_rank > 0:
-        model = get_lora_model(
-            model,
-            rank=config.lora_rank,
-            lora_alpha=config.lora_alpha,
-            lora_dropout=config.lora_dropout,
-            action_head_only=not config.lora_full_model,
-        )
-        print(f"Applied LoRA with rank {config.lora_rank}")
-
-    # Create training arguments
-    training_args = TrainingArguments(
-        output_dir=config.output_dir,
-        run_name=config.wandb_run_name if config.report_to == "wandb" else None,
-        remove_unused_columns=False,
-        deepspeed="",
-        gradient_checkpointing=False,
-        bf16=True,
-        tf32=True,
-        per_device_train_batch_size=config.batch_size,
-        gradient_accumulation_steps=1,
-        dataloader_num_workers=config.dataloader_num_workers,
-        dataloader_pin_memory=False,
-        dataloader_persistent_workers=config.dataloader_num_workers > 0,
-        optim="adamw_torch",
-        adam_beta1=0.95,
-        adam_beta2=0.999,
-        adam_epsilon=1e-8,
-        learning_rate=config.learning_rate,
-        weight_decay=config.weight_decay,
-        warmup_ratio=config.warmup_ratio,
-        lr_scheduler_type="cosine",
-        logging_steps=10.0,
-        num_train_epochs=300,
-        max_steps=config.max_steps,
-        save_strategy="steps",
-        save_steps=config.save_steps,
-        save_total_limit=8,
-        report_to=config.report_to,
-        seed=42,
-        do_eval=False,
-        ddp_find_unused_parameters=False,
-        ddp_bucket_cap_mb=100,
-        torch_compile_mode=None,
-    )
-
-    # Create trainer
-    experiment = TrainRunner(
-        train_dataset=train_dataset,
-        model=model,
-        training_args=training_args,
-        resume_from_checkpoint=config.resume,
-    )
-
-    # Add callback to save checkpoints to WandB
-    if config.report_to == "wandb":
-        class WandBCheckpointCallback:
-            def on_save(self, args, state, control, **kwargs):
-                if state.global_step % config.save_steps == 0:
-                    checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{state.global_step}")
-                    save_checkpoint_to_wandb(checkpoint_dir, state.global_step, model, config)
-        
-        # Note: The actual callback integration depends on the TrainRunner implementation
-        # This is a placeholder for the callback pattern
-
-    # Train the model
-    print("\nStarting training...")
-    experiment.train()
-    
-    # After training, manually save checkpoint components
-    if config.report_to == "wandb":
-        # Find all checkpoints
-        import glob
-        checkpoint_dirs = glob.glob(os.path.join(config.output_dir, "checkpoint-*"))
-        
-        for checkpoint_dir in checkpoint_dirs:
-            if os.path.isdir(checkpoint_dir):
-                step = int(checkpoint_dir.split('-')[-1])
-                print(f"\nProcessing checkpoint at step {step} for WandB...")
-                
-                # Save the specific components
-                try:
-                    # Save policy weights
-                    policy_path = os.path.join(checkpoint_dir, "gr00t_policy.pt")
-                    torch.save(model.state_dict(), policy_path)
-                    print(f"Saved gr00t_policy.pt to {policy_path}")
-                    
-                    # Save projector weights
-                    projector_path = os.path.join(checkpoint_dir, "projector_new_embodiment.pt")
-                    projector_state = {}
-                    for name, param in model.named_parameters():
-                        if "projector" in name and param.requires_grad:
-                            projector_state[name] = param
-                    if projector_state:
-                        torch.save(projector_state, projector_path)
-                        print(f"Saved projector_new_embodiment.pt with {len(projector_state)} parameters")
-                    
-                    # Copy modality.json
-                    modality_src = Path(config.dataset_path[0]) / "meta" / "modality.json"
-                    if modality_src.exists():
-                        modality_dst = Path(checkpoint_dir) / "modality.json"
-                        import shutil
-                        shutil.copy2(modality_src, modality_dst)
-                        print(f"Copied modality.json to checkpoint")
-                    
-                    # Now save to WandB
-                    save_checkpoint_to_wandb(checkpoint_dir, step, model, config)
-                    
-                except Exception as e:
-                    print(f"Error processing checkpoint {checkpoint_dir}: {e}")
-
-    # Save final model to WandB
-    if config.report_to == "wandb":
-        print("\nSaving final model to WandB...")
-        final_checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{config.max_steps}")
-        if os.path.exists(final_checkpoint_dir):
-            save_checkpoint_to_wandb(final_checkpoint_dir, config.max_steps, model, config)
+            full_dataset_size = len(train_dataset)
+            
+            # Apply max_samples if specified
+            if config.max_samples > 0 and config.max_samples < full_dataset_size:
+                # Use our custom wrapper to maintain type compatibility
+                train_dataset = SubsetLeRobotSingleDataset(train_dataset, config.max_samples)
+                print(f"Applied max_samples={config.max_samples} - using subset of dataset")
+                print(f"Original dataset size: {full_dataset_size}, subset size: {len(train_dataset)}")
+            else:
+                print(f"Using full dataset with {len(train_dataset)} samples")
+            
+            print(f"Dataset ready from {config.dataset_path[0]}")
         else:
-            # If exact step checkpoint doesn't exist, use the latest one
-            import glob
-            checkpoints = glob.glob(os.path.join(config.output_dir, "checkpoint-*"))
-            if checkpoints:
-                latest_checkpoint = max(checkpoints, key=lambda x: int(x.split('-')[-1]))
-                step = int(latest_checkpoint.split('-')[-1])
-                save_checkpoint_to_wandb(latest_checkpoint, step, model, config)
-        
-        # Also save the entire output directory as an artifact
-        if wandb.run is not None:
-            final_artifact = wandb.Artifact(
-                name="gr00t-sft-final-model",
-                type="model",
-                description="Final GR00T SFT model and configuration",
+            single_datasets = []
+            for dataset_path in config.dataset_path:
+                dataset = LeRobotSingleDataset(
+                    dataset_path=dataset_path,
+                    modality_configs=modality_configs,
+                    transforms=transforms,
+                    embodiment_tag=embodiment_tag,
+                    video_backend=config.video_backend,
+                )
+                
+                # Note: max_samples feature not yet implemented
+                    
+                single_datasets.append(dataset)
+            
+            train_dataset = LeRobotMixtureDataset(
+                data_mixture=[
+                    (dataset, 1.0)  # Equal weights for all datasets
+                    for dataset in single_datasets
+                ],
+                mode="train",
+                balance_dataset_weights=config.balance_dataset_weights,
+                balance_trajectory_weights=config.balance_trajectory_weights,
+                seed=42,
+                metadata_config={
+                    "percentile_mixing_method": "weighted_average",
+                },
             )
-            final_artifact.add_dir(config.output_dir)
-            wandb.run.log_artifact(final_artifact)
-        
-        # Finish WandB run
-        wandb.finish()
+            print(f"Loaded {len(single_datasets)} datasets with total {sum(len(d) for d in single_datasets)} samples")
 
-    print("\nTraining completed successfully!")
+        # Load model
+        model = GR00T_N1_5.from_pretrained(
+            pretrained_model_name_or_path=config.base_model_path,
+            tune_llm=config.tune_llm,
+            tune_visual=config.tune_visual,
+            tune_projector=config.tune_projector,
+            tune_diffusion_model=config.tune_diffusion_model,
+        )
+
+        # Set compute dtype
+        model.compute_dtype = "bfloat16"
+        model.config.compute_dtype = "bfloat16"
+
+        # Apply LoRA if configured
+        if config.lora_rank > 0:
+            model = get_lora_model(
+                model,
+                rank=config.lora_rank,
+                lora_alpha=config.lora_alpha,
+                lora_dropout=config.lora_dropout,
+                action_head_only=not config.lora_full_model,
+            )
+            print(f"Applied LoRA with rank {config.lora_rank}")
+
+        # Create training arguments
+        training_args = TrainingArguments(
+            output_dir=config.output_dir,
+            run_name=config.wandb_run_name if config.report_to == "wandb" else None,
+            remove_unused_columns=False,
+            deepspeed="",
+            gradient_checkpointing=False,
+            bf16=True,
+            tf32=True,
+            per_device_train_batch_size=config.batch_size,
+            gradient_accumulation_steps=1,
+            dataloader_num_workers=config.dataloader_num_workers,
+            dataloader_pin_memory=False,
+            dataloader_persistent_workers=config.dataloader_num_workers > 0,
+            optim="adamw_torch",
+            adam_beta1=0.95,
+            adam_beta2=0.999,
+            adam_epsilon=1e-8,
+            learning_rate=config.learning_rate,
+            weight_decay=config.weight_decay,
+            warmup_ratio=config.warmup_ratio,
+            lr_scheduler_type="cosine",
+            logging_steps=10.0,
+            num_train_epochs=300,
+            max_steps=config.max_steps,
+            save_strategy="steps",
+            save_steps=config.save_steps,
+            save_total_limit=8,
+            report_to=config.report_to,
+            seed=42,
+            do_eval=False,
+            ddp_find_unused_parameters=False,
+            ddp_bucket_cap_mb=100,
+            torch_compile_mode=None,
+        )
+
+        # Create trainer
+        experiment = TrainRunner(
+            train_dataset=train_dataset,
+            model=model,
+            training_args=training_args,
+            resume_from_checkpoint=config.resume,
+        )
+
+        # Add callback to save checkpoints to WandB
+        if config.report_to == "wandb":
+            class WandBCheckpointCallback:
+                def on_save(self, args, state, control, **kwargs):
+                    if state.global_step % config.save_steps == 0:
+                        checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{state.global_step}")
+                        save_checkpoint_to_wandb(checkpoint_dir, state.global_step, model, config)
+            
+            # Note: The actual callback integration depends on the TrainRunner implementation
+            # This is a placeholder for the callback pattern
+
+        # Train the model
+        print("\nStarting training...")
+        experiment.train()
+        
+        # After training, save only the final checkpoint to WandB
+
+        # Save final model to WandB
+        if config.report_to == "wandb":
+            print("\nSaving final model to WandB...")
+            final_checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{config.max_steps}")
+            if os.path.exists(final_checkpoint_dir):
+                save_checkpoint_to_wandb(final_checkpoint_dir, config.max_steps, model, config)
+            else:
+                # If exact step checkpoint doesn't exist, use the latest one
+                import glob
+                checkpoints = glob.glob(os.path.join(config.output_dir, "checkpoint-*"))
+                if checkpoints:
+                    latest_checkpoint = max(checkpoints, key=lambda x: int(x.split('-')[-1]))
+                    step = int(latest_checkpoint.split('-')[-1])
+                    save_checkpoint_to_wandb(latest_checkpoint, step, model, config)
+            
+            # Don't upload the entire output directory - it's too large (115GB+)
+            # The final checkpoint has already been uploaded above
+            
+        print("\nTraining completed successfully!")
+    
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user")
+    except Exception as e:
+        print(f"\nError during training: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Always finish WandB run if it was started
+        if wandb_run_active and wandb.run is not None:
+            print("\nFinishing WandB run...")
+            try:
+                wandb.finish()
+                print("WandB run finished successfully")
+            except Exception as e:
+                print(f"Error finishing WandB run: {e}")
 
 
 if __name__ == "__main__":

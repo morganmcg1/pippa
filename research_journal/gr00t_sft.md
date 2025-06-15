@@ -277,6 +277,87 @@ model.load_state_dict(projector_weights, strict=False)
 - **Solution**: Post-process checkpoints after training to add required files
 - **TODO**: Consider subclassing TrainRunner for real-time checkpoint enhancement
 
+### 6. **Dataset Subsetting Solution (2025-06-15)**
+- **Problem**: TrainRunner rejects torch.utils.data.Subset - expects LeRobotSingleDataset type
+- **Solution**: Created SubsetLeRobotSingleDataset wrapper that:
+  - Inherits from LeRobotSingleDataset
+  - Copies all attributes from base dataset
+  - Overrides __len__ and __getitem__ for subsetting
+  - Maintains type compatibility with TrainRunner
+- **Result**: Can now properly use --max-samples parameter
+- **Example**: 1000 samples from 46,963 total for quick experiments
+
+## Critical Discovery: StopIteration Error with tune_diffusion_model (2025-06-15)
+
+### The Issue
+When `tune_diffusion_model=True`, training fails with StopIteration error:
+```
+File "/home/ubuntu/pippa/Isaac-GR00T/gr00t/model/action_head/flow_matching_action_head.py", line 414, in dtype
+    return next(iter(self.parameters())).dtype
+StopIteration
+```
+
+### Root Cause
+The action head's diffusion model has no parameters when initialized with certain configurations.
+
+### Solution
+**Always use `--no-tune-diffusion-model` flag** to avoid this error. This is also mentioned in the blog post as a tip for low VRAM situations, but it's actually necessary to avoid the StopIteration error.
+
+### Successful Configuration (2025-06-15)
+```python
+# Working parameters
+tune_llm = False
+tune_visual = False  
+tune_projector = True
+tune_diffusion_model = False  # CRITICAL: Must be False
+```
+
+## WandB Artifact Upload Success (2025-06-15)
+
+### Working Implementation
+Successfully implemented WandB artifact upload with:
+- Proper artifact naming (no step numbers in name)
+- Aliases: step-N, latest, run-{run_id}
+- Type: "gr00t-model" (not generic "model")
+- Size optimization: Skip optimizer.pt (saves 8GB)
+- Include all essential files for inference
+
+### Artifact Contents (9.2GB total)
+1. `config.json` - Model configuration
+2. `model-*.safetensors` - Model weights (7.2GB)
+3. `model.safetensors.index.json` - Index file
+4. `trainer_state.json` - Training state
+5. `experiment_cfg/` - Experiment configuration directory
+6. `action_head_new_embodiment.pt` - Trainable parameters (1.98GB, 81 params)
+7. `modality.json` - Dataset configuration
+
+### Successful Overfitting Test (2025-06-15_22:15)
+- **Run ID**: asbuvdci
+- **Configuration**:
+  - 50 samples, batch size 4
+  - Learning rate: 5e-4 (5x blog default)
+  - 100 steps
+- **Results**:
+  - Loss: 0.3704 → 0.0706 (81% reduction)
+  - Training time: 96.7 seconds
+  - Successful WandB artifact upload
+  - Proper gradient flow throughout
+
+## Full Training Configuration (Blog Parameters)
+Based on the official blog post:
+```bash
+python train_gr00t_sft.py \
+   --dataset-path demo_data/so101-table-cleanup \
+   --num-gpus 1 \
+   --output-dir ./so101-checkpoints \
+   --max-steps 10000 \
+   --data-config so100_dualcam \
+   --video-backend torchvision_av \
+   --batch-size 4 \
+   --save-steps 1000 \
+   --no-tune-diffusion-model  # CRITICAL
+```
+
 ## References
 - [GR00T N1.5 SO-101 Fine-tuning Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning) - Official NVIDIA blog post
 - [Isaac-GR00T GitHub](https://github.com/NVIDIA/Isaac-GR00T) - Official repository

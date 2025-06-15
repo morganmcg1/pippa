@@ -117,8 +117,14 @@ This ensures we can reconstruct the timeline of experiments and cross-reference 
 
 ### H100 Machine Access
 Current H100 machines:
-- `ubuntu@192.222.52.59` (Original)
-- `ubuntu@192.222.53.15` (New - for GR00T training)
+- `ubuntu@192.222.52.59` (Original - for GRPO experiments)
+- `ubuntu@192.222.53.15` (New - **ONLY for GR00T SFT experiments**)
+
+**IMPORTANT**: GR00T SFT experiments MUST be run on `ubuntu@192.222.53.15` only. This server has:
+- 4x H100 80GB GPUs
+- Isaac-GR00T environment properly configured
+- Required datasets at `~/pippa/datasets/`
+- Virtual environment at `~/pippa/Isaac-GR00T/sft_venv`
 
 Always:
 1. Check GPU availability with `nvidia-smi`
@@ -276,6 +282,111 @@ Log generation samples to WandB Tables for better visualization:
 - Use TRL callbacks (see `train_grpo_verifiable_callbacks.py`)
 - Monitor both training reward and evaluation accuracy
 
+### WandB Artifact Naming and Aliases
+When saving model checkpoints to WandB artifacts, use consistent naming with aliases for versioning:
+
+**DO NOT** include step/epoch numbers in the artifact name:
+```python
+# BAD - creates many separate artifacts
+artifact = wandb.Artifact(
+    name=f"model-checkpoint-step-{step}",  # ❌ Don't do this
+    type="model"
+)
+```
+
+**DO** use a consistent name and use aliases for versioning:
+```python
+# GOOD - single artifact with multiple versions
+artifact = wandb.Artifact(
+    name="gr00t-sft-so100_dualcam-bs64",  # ✅ Consistent name
+    type="gr00t-model",  # ✅ Use specific type for GR00T models
+    description=f"GR00T SFT model - batch_size={batch_size}, dataset={dataset_name}"
+)
+
+# Log with step as alias
+wandb.run.log_artifact(artifact, aliases=[f"step-{step}", "latest"])
+```
+
+**Note**: Use descriptive artifact types like `"gr00t-model"` instead of generic `"model"` to better organize different model types in WandB.
+
+This creates a single artifact with multiple versions, each tagged with aliases like:
+- `step-100`, `step-200`, etc. for specific checkpoints
+- `latest` for the most recent version
+- `best` or `final` for special checkpoints
+
+Benefits:
+- Cleaner artifact organization
+- Easy to track model evolution
+- Can reference specific versions by alias
+- Reduces artifact clutter in WandB UI
+
+### WandB Artifacts for Large Model Checkpoints
+
+When uploading large model checkpoints (20GB+):
+
+#### Best Practices:
+1. **Upload only essential files** - Skip optimizer state unless resuming training
+2. **Use `add_file()` instead of `add_dir()`** - More control over what's uploaded
+3. **Add `skip_cache=True`** for large files to avoid copying to cache
+4. **Use try-finally blocks** to ensure `wandb.finish()` is called
+
+#### Example for Large Model Checkpoints:
+```python
+def save_checkpoint_to_wandb(checkpoint_dir, step, model=None, config=None):
+    """Save only essential files for inference, skip optimizer state."""
+    try:
+        artifact = wandb.Artifact(
+            name="model-name",
+            type="model",
+            description=f"Model checkpoint at step {step}"
+        )
+        
+        # Add only essential files (skip optimizer.pt)
+        essential_files = [
+            "config.json",
+            "model.safetensors",  # or model weights
+            "tokenizer.json"      # if applicable
+        ]
+        
+        for filename in essential_files:
+            filepath = Path(checkpoint_dir) / filename
+            if filepath.exists():
+                artifact.add_file(str(filepath), skip_cache=True)
+        
+        wandb.run.log_artifact(artifact, aliases=[f"step-{step}", "latest"])
+        
+    except Exception as e:
+        print(f"Error saving to WandB: {e}")
+```
+
+#### What NOT to Upload:
+- `optimizer.pt` (8GB+) - Only needed for resuming training
+- Full checkpoint directories with `add_dir()` - Too large, times out
+- Duplicate files (e.g., saving model.pt when safetensors already exists)
+
+#### Typical Checkpoint Sizes:
+- Model weights: 7-10GB (necessary)
+- Optimizer state: 8-15GB (skip unless resuming)
+- Total with optimizer: 20-25GB per checkpoint
+- Without optimizer: 7-10GB (much faster to upload)
+
+### WandB Support Resources
+
+**Always use the WandB support bot for WandB-specific questions**:
+```python
+# Use the MCP tool for WandB support
+mcp__wandb__query_wandb_support_bot(
+    question="Your question about WandB features, artifacts, etc."
+)
+```
+
+The support bot can help with:
+- Artifact upload strategies
+- API usage and best practices
+- Troubleshooting timeouts and errors
+- Integration questions
+- Performance optimization
+
 ### Gymnasium-Robotics and GR00T Integration
 
 #### Key Scripts
@@ -294,3 +405,40 @@ Log generation samples to WandB Tables for better visualization:
 - Log tables immediately after adding data
 - Always use try-finally blocks with `wandb.finish()`
 - Record every 5 episodes for balanced video generation
+
+## GR00T SFT Critical Learnings (2025-06-15)
+
+### StopIteration Error Fix
+**CRITICAL**: Always use `--no-tune-diffusion-model` flag to avoid StopIteration error:
+```bash
+python train_gr00t_sft.py \
+   --dataset-path demo_data/so101-table-cleanup \
+   --max-steps 10000 \
+   --batch-size 4 \
+   --no-tune-diffusion-model  # CRITICAL: Prevents StopIteration error
+```
+
+### Working Configuration
+```python
+# These settings MUST be used to avoid errors
+tune_llm = False
+tune_visual = False  
+tune_projector = True
+tune_diffusion_model = False  # MUST be False
+```
+
+### WandB Artifact Best Practices for GR00T
+1. **Artifact naming**: Use consistent names like `gr00t-sft-so100_dualcam-bs{batch_size}`
+2. **Aliases**: Include `step-{step}`, `latest`, and `run-{run_id}`
+3. **Type**: Use `"gr00t-model"` not generic `"model"`
+4. **Size optimization**: Skip optimizer.pt (saves 8GB)
+5. **Contents**: Include model weights, action_head_new_embodiment.pt, modality.json, and experiment_cfg/
+
+### Successful Training Parameters
+- **Overfitting test**: 50 samples, batch_size=4, lr=5e-4, 100 steps → 81% loss reduction
+- **Blog defaults**: batch_size=4, max_steps=10000, save_steps=1000, lr=1e-4
+- **GPU Server**: Must use `ubuntu@192.222.53.15` for GR00T SFT experiments
+
+For detailed experiment results, see:
+- [research_journal/gr00t_sft.md](./research_journal/gr00t_sft.md) - Complete GR00T SFT experiments
+- [research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md) - Original GR00T tuning

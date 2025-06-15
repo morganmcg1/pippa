@@ -476,6 +476,7 @@ def main():
     parser.add_argument("--beta", type=float, default=0.1, help="KL penalty coefficient")
     parser.add_argument("--quick-test", action="store_true", help="Quick test mode")
     parser.add_argument("--name-suffix", type=str, default="", help="Suffix for run name")
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1, help="Gradient accumulation steps")
     
     args = parser.parse_args()
     
@@ -635,9 +636,13 @@ def main():
             return rewards
         
         # Step 5: Configure training
+        # Adjust batch size for gradient accumulation
+        per_device_batch = min(args.batch_size // args.gradient_accumulation_steps, len(dataset))
+        
         config = GRPOConfig(
             output_dir=f"./absolute_zero_unified_iter_{iteration}",
-            per_device_train_batch_size=min(args.batch_size, len(dataset)),
+            per_device_train_batch_size=per_device_batch,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
             num_train_epochs=1,
             learning_rate=args.learning_rate,
             logging_steps=1,
