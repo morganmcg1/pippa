@@ -36,7 +36,7 @@ def test_pendulum():
     
     model = PPOGr00tActorCriticV2(
         observation_space=env.observation_space,
-        action_space=env.action_space,
+        action_dim=act_dim,
         use_multimodal_encoder=False,
         device=device
     ).to(device)
@@ -90,7 +90,7 @@ def test_multimodal():
     # Create model with multimodal support
     model = PPOGr00tActorCriticV2(
         observation_space=obs_space,
-        action_space=act_space,
+        action_dim=act_space.shape[0],
         use_multimodal_encoder=True,
         device=device
     ).to(device)
@@ -141,7 +141,7 @@ def test_gpu_utilization():
         
         model = PPOGr00tActorCriticV2(
             observation_space=obs_space,
-            action_space=act_space,
+            action_dim=act_dim,
             use_multimodal_encoder=False,
             device=device
         ).to(device)
