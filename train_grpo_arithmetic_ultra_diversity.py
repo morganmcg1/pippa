@@ -337,7 +337,6 @@ def main():
         reward_funcs=[reward_wrapper],
         args=config,
         train_dataset=dataset,
-        tokenizer=tokenizer,
     )
     
     print(f"Effective batch size: {config.per_device_train_batch_size}")
@@ -351,7 +350,7 @@ def main():
     
     # Evaluate
     print("\nEvaluating model...")
-    eval_results = evaluate_model(trainer.model, tokenizer, dataset, reward_wrapper)
+    eval_results = evaluate_model(trainer.model, trainer.tokenizer, dataset, reward_wrapper)
     
     # Log results
     wandb.log(eval_results)
