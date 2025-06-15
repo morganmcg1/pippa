@@ -110,23 +110,23 @@ def train(args):
         # Track if we've logged any videos yet
         videos_logged = False
         
-    # Setup tensorboard writer
-    writer = SummaryWriter(f"runs/{run_name}")
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
-    
-    # Seeding
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
-    
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    
-    # Create environments
-    env_fns = [make_fetch_env(args.env_id, i, args.capture_video, run_name, 
+        # Setup tensorboard writer
+        writer = SummaryWriter(f"runs/{run_name}")
+        writer.add_text(
+            "hyperparameters",
+            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
+        )
+        
+        # Seeding
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        torch.backends.cudnn.deterministic = args.torch_deterministic
+        
+        device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+        
+        # Create environments
+        env_fns = [make_fetch_env(args.env_id, i, args.capture_video, run_name, 
                               args.observation_mode, args.reward_mode) 
                for i in range(args.num_envs)]
     
