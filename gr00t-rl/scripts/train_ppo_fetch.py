@@ -113,7 +113,7 @@ def train(args):
         buffer_size=args.num_steps,
         observation_space=envs.observation_space,
         action_space=envs.action_space,
-        device=device,
+        device=device.type,  # Pass string device type, not the device object
         gamma=args.gamma,
         gae_lambda=args.gae_lambda,
         n_envs=args.num_envs
@@ -144,8 +144,11 @@ def train(args):
         for step in range(0, args.num_steps):
             global_step += args.num_envs
             
+            # Store current observation for this step
+            obs = next_obs
+            
             with torch.no_grad():
-                action, logprob, _, value = model.get_action_and_value(next_obs)
+                action, logprob, _, value = model.get_action_and_value(obs)
             
             # Execute action in environment
             next_obs_np, reward, terminated, truncated, infos = envs.step(action.cpu().numpy())
@@ -155,9 +158,9 @@ def train(args):
             next_obs = torch.Tensor(next_obs_np).to(device)
             next_done = torch.Tensor(done).to(device)
             
-            # Store in buffer
+            # Store in buffer (with the observation that led to this action)
             buffer.add(
-                next_obs,
+                obs,
                 action,
                 rewards,
                 next_done,
