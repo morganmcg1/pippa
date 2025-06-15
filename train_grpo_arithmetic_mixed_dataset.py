@@ -245,15 +245,22 @@ def main():
         log_completions=True,
         num_generations=num_generations,
         temperature=temperature,
-        max_new_tokens=16,
+        max_completion_length=16,
+        max_prompt_length=128,
         seed=SEED,
         # GRPO specific
         beta=0.1,
         loss_type="grpo",
-        num_iterations=1,
         # Additional
         dataloader_num_workers=0,
         wandb_log_unique_prompts=True,
+        bf16=True,
+        gradient_checkpointing=True,
+        warmup_ratio=0.1,
+        weight_decay=0.01,
+        max_grad_norm=1.0,
+        optim="adamw_torch",
+        scale_rewards=True,
     )
     
     print("\nGRPO Configuration:")
