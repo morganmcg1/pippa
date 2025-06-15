@@ -87,21 +87,33 @@ Created `train_absolute_zero_baseline.py` with:
 Ready to run first experiment!
 
 ### First Experiment Launch - 2025-06-15_19:11 - Run ID: fv3ni9jh
-- **Status**: RUNNING on H100 GPU (cuda)
-- **WandB**: https://wandb.ai/wild-ai/pippa/runs/fv3ni9jh
-- **Configuration**:
-  - 20 iterations total
-  - 100 samples per iteration
-  - Solver: 5 epochs per iteration
-  - Proposer: 3 epochs per iteration
-  - Batch size: 32
-  - Learning rate: 5e-6
-  - Temperature: 0.7 (solver), 1.0 (proposer)
-  - KL penalty: beta=0.1
-- **Running on**: ubuntu@192.222.52.59
-- **tmux session**: absolute_zero
+- **Status**: FAILED (multiple attempts)
+- **Issue**: Various initialization errors
 
-Monitor with: `ssh ubuntu@192.222.52.59 -t 'tmux attach -t absolute_zero'`
+### Current Run - 2025-06-15_19:21 - Run ID: rz2b20mh
+- **Status**: RUNNING on H100 GPU (cuda)
+- **WandB**: https://wandb.ai/wild-ai/pippa/runs/rz2b20mh
+- **Configuration**: Same as above
+- **Progress**: Iteration 5/20, Solver accuracy: 31.5%
+- **Issue Found**: Proposer rewards are all 0 - the learnability reward calculation is broken
+
+### Debugging Session - 2025-06-15_19:59
+**Issues Identified:**
+1. **Proposer rewards all 0**: The learnability reward is computed once for entire batch
+2. **Poor problem generation**: Proposer doesn't understand the format
+3. **No visibility**: Need logging to see what proposer is generating
+
+**Fixes Applied:**
+1. Added comprehensive print logging for proposer outputs
+2. Added WandB table logging for both proposer generations and solver results
+3. Improved prompt engineering with explicit format examples
+4. Added raw generation tracking to debug parsing issues
+
+**Key Changes:**
+- Modified `generate_problems()` to return raw generations for debugging
+- Added WandB tables: `proposer_generations` and `solver_results`
+- Better prompts with explicit format: "Calculate: X op Y = "
+- Print logging shows parsing success rate and sample outputs
 
 ## Key Metrics to Track
 1. **Solver Accuracy**: On standardized eval set

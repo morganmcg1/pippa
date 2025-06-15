@@ -46,6 +46,13 @@ class ArgsConfig:
 
     data_config: Literal[tuple(DATA_CONFIG_MAP.keys())] = "so100_dualcam"
     """Data configuration name from DATA_CONFIG_MAP"""
+    
+    # Data sampling
+    max_samples: int = -1
+    """Maximum number of samples to use from dataset (-1 for all)"""
+    
+    percentage: float = 1.0
+    """Percentage of dataset to use (0.0 to 1.0)"""
 
     # Training parameters
     max_steps: int = 10000
@@ -70,7 +77,7 @@ class ArgsConfig:
     base_model_path: str = "nvidia/GR00T-N1.5-3B"
     """Base model path or HuggingFace model ID"""
 
-    embodiment_tag: Literal[tuple(EmbodimentTag.__members__.keys())] = "NEW_EMBODIMENT"
+    embodiment_tag: str = "new_embodiment"
     """Embodiment tag for the robot"""
 
     # Fine-tuning flags
@@ -223,33 +230,49 @@ def main(config: ArgsConfig):
     available_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
     assert config.num_gpus <= available_gpus, f"Requested {config.num_gpus} GPUs but only {available_gpus} available"
 
+    # Get embodiment tag
+    embodiment_tag = EmbodimentTag(config.embodiment_tag)
+    
+    # Get modality configs and transforms
+    data_config_cls = DATA_CONFIG_MAP[config.data_config]
+    modality_configs = data_config_cls.modality_config()
+    transforms = data_config_cls.transform()
+    
     # Load dataset
     if len(config.dataset_path) == 1:
+        # Load single dataset
         train_dataset = LeRobotSingleDataset(
-            config.dataset_path[0],
-            action_transform_config=DATA_CONFIG_MAP[config.data_config],
-            mode="train",
-            # percentage=config.percentage,
+            dataset_path=config.dataset_path[0],
+            modality_configs=modality_configs,
+            transforms=transforms,
+            embodiment_tag=embodiment_tag,
+            video_backend=config.video_backend,
         )
-        print(f"Loaded single dataset from {config.dataset_path[0]}")
+        
+        # Note: max_samples feature not yet implemented for LeRobotSingleDataset
+        if config.max_samples > 0:
+            print(f"Warning: max_samples={config.max_samples} specified but feature not yet implemented")
+            print(f"Dataset has {len(train_dataset)} samples total")
+        
+        print(f"Loaded single dataset from {config.dataset_path[0]} with {len(train_dataset)} samples")
     else:
-        single_datasets = [
-            LeRobotSingleDataset(
-                dataset_path,
-                action_transform_config=DATA_CONFIG_MAP[config.data_config],
-                mode="train",
-                # percentage=config.percentage,
+        single_datasets = []
+        for dataset_path in config.dataset_path:
+            dataset = LeRobotSingleDataset(
+                dataset_path=dataset_path,
+                modality_configs=modality_configs,
+                transforms=transforms,
+                embodiment_tag=embodiment_tag,
+                video_backend=config.video_backend,
             )
-            for dataset_path in config.dataset_path
-        ]
+            
+            # Note: max_samples feature not yet implemented
+                
+            single_datasets.append(dataset)
         
         train_dataset = LeRobotMixtureDataset(
-            mixture_datasets=[
-                {
-                    "mode": "train",
-                    "dataset": dataset,
-                    "weight": 1.0 / len(single_datasets),
-                }
+            data_mixture=[
+                (dataset, 1.0)  # Equal weights for all datasets
                 for dataset in single_datasets
             ],
             mode="train",
@@ -260,7 +283,7 @@ def main(config: ArgsConfig):
                 "percentile_mixing_method": "weighted_average",
             },
         )
-        print(f"Loaded {len(single_datasets)} datasets")
+        print(f"Loaded {len(single_datasets)} datasets with total {sum(len(d) for d in single_datasets)} samples")
 
     # Load model
     model = GR00T_N1_5.from_pretrained(
@@ -371,8 +394,11 @@ if __name__ == "__main__":
     # Parse arguments
     config = tyro.cli(ArgsConfig)
     
-    # Check if running in multi-GPU mode
-    if config.num_gpus > 1:
+    # Check if we're already in a distributed process
+    if "LOCAL_RANK" in os.environ:
+        # We're already in a distributed process, just run main
+        main(config)
+    elif config.num_gpus > 1:
         # Use torchrun for multi-GPU training
         cmd = [
             sys.executable, "-m", "torch.distributed.run",

@@ -171,19 +171,23 @@ class AbsoluteZeroTrainer:
         # Tracking solver performance for learnability rewards
         self.solver_history = deque(maxlen=100)
         
-    def generate_problems(self, num_problems: int) -> List[Dict[str, str]]:
+    def generate_problems(self, num_problems: int) -> Tuple[List[Dict[str, str]], List[Dict]]:
         """Use proposer to generate new arithmetic problems."""
         problems = []
+        raw_generations = []  # Track all raw outputs for debugging
         
         # Prompt engineering for problem generation
         base_prompts = [
-            "Generate a simple arithmetic problem: ",
-            "Create a math problem with addition or subtraction: ",
-            "Write an arithmetic problem with multiplication: ",
-            "Create a challenging arithmetic problem: ",
+            "Generate a simple arithmetic problem in the format 'Calculate: X + Y = ': ",
+            "Create a math problem with addition or subtraction in the format 'Calculate: X - Y = ': ",
+            "Write an arithmetic problem with multiplication in the format 'Calculate: X * Y = ': ",
+            "Create a challenging arithmetic problem in the format 'Calculate: X op Y = ' where op is +, -, or *: ",
+            "Calculate: ",  # Simple prompt that might work better
         ]
         
         self.proposer_model.eval()
+        
+        print(f"\n[PROPOSER] Generating {num_problems} problems...")
         
         for i in range(num_problems):
             prompt = random.choice(base_prompts)
@@ -201,24 +205,53 @@ class AbsoluteZeroTrainer:
             generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             problem_text = generated[len(prompt):].strip()
             
+            # Log raw generation
+            raw_generations.append({
+                'prompt_type': prompt.strip(),
+                'raw_output': problem_text[:100],  # Truncate for logging
+                'parsed': False
+            })
+            
             # Parse the generated problem
             # Expected format: "Calculate: X op Y = "
             if "Calculate:" in problem_text:
+                parsed_problem = problem_text.split('=')[0].strip() + ' = '
                 problems.append({
-                    'prompt': problem_text.split('=')[0].strip() + ' = ',
-                    'source': 'proposer'
+                    'prompt': parsed_problem,
+                    'source': 'proposer',
+                    'raw': problem_text
                 })
+                raw_generations[-1]['parsed'] = True
+                raw_generations[-1]['final_problem'] = parsed_problem
             else:
                 # Try to extract a valid problem
                 match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', problem_text)
                 if match:
                     a, op, b = match.groups()
+                    parsed_problem = f"Calculate: {a} {op} {b} = "
                     problems.append({
-                        'prompt': f"Calculate: {a} {op} {b} = ",
-                        'source': 'proposer'
+                        'prompt': parsed_problem,
+                        'source': 'proposer',
+                        'raw': problem_text
                     })
+                    raw_generations[-1]['parsed'] = True
+                    raw_generations[-1]['final_problem'] = parsed_problem
         
-        return problems
+        # Print debug info
+        parsed_count = sum(1 for g in raw_generations if g['parsed'])
+        print(f"[PROPOSER] Successfully parsed {parsed_count}/{num_problems} problems")
+        
+        # Sample some raw outputs for debugging
+        print("\n[PROPOSER] Sample raw outputs:")
+        for i, gen in enumerate(raw_generations[:5]):
+            print(f"  {i+1}. Prompt: '{gen['prompt_type']}'")
+            print(f"     Raw: '{gen['raw_output']}'")
+            if gen['parsed']:
+                print(f"     Parsed: '{gen.get('final_problem', 'N/A')}'")
+            else:
+                print(f"     Parsed: FAILED")
+        
+        return problems, raw_generations
     
     def solve_problems(self, problems: List[Dict[str, str]]) -> List[Dict[str, Any]]:
         """Use solver to solve generated problems and compute answers."""
@@ -325,11 +358,11 @@ class AbsoluteZeroTrainer:
         
         return learnability_reward
     
-    def create_training_datasets(self, num_samples: int) -> Tuple[Dataset, Dataset]:
+    def create_training_datasets(self, num_samples: int) -> Tuple[Dataset, Dataset, List[Dict], List[Dict]]:
         """Create training datasets for both proposer and solver."""
         # Generate problems using proposer
         print(f"Generating {num_samples} problems using proposer...")
-        generated_problems = self.generate_problems(num_samples)
+        generated_problems, raw_generations = self.generate_problems(num_samples)
         
         # Add some seed problems to ensure initial learning
         seed_problems = []
@@ -374,7 +407,7 @@ class AbsoluteZeroTrainer:
         }
         proposer_dataset = Dataset.from_dict(proposer_data)
         
-        return proposer_dataset, solver_dataset
+        return proposer_dataset, solver_dataset, raw_generations, results
 
 
 def main():
@@ -425,6 +458,10 @@ def main():
     # Initialize trainer
     trainer = AbsoluteZeroTrainer(model_name, device)
     
+    # Initialize WandB tables for tracking
+    proposer_table = wandb.Table(columns=["iteration", "prompt_type", "raw_output", "parsed_problem", "parsed_success"])
+    solver_table = wandb.Table(columns=["iteration", "problem", "solver_answer", "correct_answer", "is_correct", "difficulty"])
+    
     # Main training loop
     for iteration in range(total_iterations):
         print(f"\\n{'='*60}")
@@ -432,7 +469,28 @@ def main():
         print(f"{'='*60}")
         
         # Create datasets for this iteration
-        proposer_dataset, solver_dataset = trainer.create_training_datasets(samples_per_iteration)
+        proposer_dataset, solver_dataset, raw_generations, solver_results = trainer.create_training_datasets(samples_per_iteration)
+        
+        # Log proposer generations to WandB table
+        for gen in raw_generations[:20]:  # Log first 20 for visibility
+            proposer_table.add_data(
+                iteration + 1,
+                gen['prompt_type'],
+                gen['raw_output'],
+                gen.get('final_problem', 'N/A'),
+                gen['parsed']
+            )
+        
+        # Log solver results to WandB table
+        for result in solver_results[:20]:  # Log first 20 for visibility
+            solver_table.add_data(
+                iteration + 1,
+                result['prompt'],
+                result['solver_answer'],
+                result['correct_answer'],
+                result['is_correct'],
+                result['difficulty']
+            )
         
         # Train solver
         print(f"\\nTraining solver for {solver_epochs_per_iteration} epochs...")
@@ -616,6 +674,10 @@ def main():
         print(f"\\nIteration {iteration + 1} complete!")
         print(f"Solver accuracy: {solver_metrics['eval_accuracy']:.2%}")
         print(f"Baselines updated: {len(baseline_stats)} values")
+    
+    # Log WandB tables
+    wandb.log({"proposer_generations": proposer_table})
+    wandb.log({"solver_results": solver_table})
     
     # Final evaluation
     print("\\n" + "="*60)

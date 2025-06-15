@@ -16,6 +16,12 @@ For experiment-specific results and detailed analyses, see:
 - This keeps the codebase cleaner and makes it easier to track changes
 - Example: If modifying a training script with a few parameter changes, edit the existing script rather than creating a new variant
 
+### Reuse Training Scripts with Arguments
+- **ALWAYS reuse existing training scripts** by passing different arguments instead of creating new scripts
+- Add command-line arguments to scripts to make them configurable
+- Only create new scripts when the logic is fundamentally different
+- Example: For testing different batch sizes, use `--batch-size` argument rather than creating `train_batch_size_32.py`
+
 ## Dependency Management
 
 ### Use `uv` and `pyproject.toml`
