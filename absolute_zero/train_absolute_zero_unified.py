@@ -548,7 +548,9 @@ def main():
                 continue
             
             # Create proposer prompts
-            for _ in range(args.batch_size // 3):  # Divide batch among task types
+            # Each iteration should have equal proposer/solver samples
+            # With 3 task types, allocate batch_size/6 per task type per role
+            for _ in range(args.batch_size // 6):  # Divide by 6: 3 task types × 2 roles
                 prompt = trainer.create_proposer_prompt(task_type, buffer_samples)
                 all_prompts.append(prompt)
                 all_info.append((None, task_type, 'proposer'))
@@ -565,7 +567,7 @@ def main():
                 buffer = trainer.induction_buffer
             
             # Sample tasks to solve
-            tasks = buffer.sample(args.batch_size // 3)
+            tasks = buffer.sample(args.batch_size // 6)  # Match proposer allocation
             for task in tasks:
                 prompt = trainer.create_solver_prompt(task, task_type)
                 all_prompts.append(prompt)
@@ -642,7 +644,7 @@ def main():
             save_steps=1000,
             report_to="wandb",
             remove_unused_columns=False,
-            num_generations=4,  # GRPO generations per prompt
+            num_generations=4 if args.batch_size <= 16 else (8 if args.batch_size <= 32 else 16),  # Scale with batch size
             temperature=args.temperature,
             max_completion_length=64,
             max_prompt_length=256,
