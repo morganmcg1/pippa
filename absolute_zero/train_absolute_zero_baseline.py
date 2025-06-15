@@ -404,10 +404,28 @@ class AbsoluteZeroTrainer:
                 'source': 'seed'
             })
         
+        # Take only the number of problems we need (prioritize proposer-generated)
+        if len(generated_problems) > num_samples - len(seed_problems):
+            # We have enough valid proposer problems
+            generated_problems = generated_problems[:num_samples - len(seed_problems)]
+            print(f"Using {len(generated_problems)} proposer problems + {len(seed_problems)} seed problems")
+        else:
+            # Need more seed problems to fill the gap
+            print(f"Only {len(generated_problems)} valid proposer problems, adding more seed problems")
+            additional_seeds_needed = num_samples - len(generated_problems) - len(seed_problems)
+            for _ in range(max(0, additional_seeds_needed)):
+                a = random.randint(0, 10)
+                b = random.randint(0, 10)
+                op = random.choice(['+', '-', '*'])
+                seed_problems.append({
+                    'prompt': f"Calculate: {a} {op} {b} = ",
+                    'source': 'seed'
+                })
+        
         all_problems = generated_problems + seed_problems
         
         # Solve problems to get answers and compute rewards
-        print("Solving generated problems...")
+        print(f"Solving {len(all_problems)} problems total...")
         results = self.solve_problems(all_problems)
         
         # Compute per-problem learnability rewards for proposer
