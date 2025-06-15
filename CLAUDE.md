@@ -630,6 +630,69 @@ class GRPOTrainerFixed(GRPOTrainer):
 ### Use MCP Tool for WandB Monitoring
 **IMPORTANT**: Always use the wandb MCP tool to check training progress instead of SSH/tmux commands. This is the default and preferred method.
 
+### WandB Video Logging for Gymnasium Environments
+When using Gymnasium environments (like Fetch robotics tasks), ensure proper video logging to WandB:
+
+1. **Basic Setup**: Add `monitor_gym=True` to `wandb.init()`:
+```python
+wandb.init(
+    project="pippa",
+    entity="wild-ai",
+    monitor_gym=True,  # Enables automatic Gymnasium video logging
+    tags=["gr00t-rl", "ppo", "fetch"],
+)
+```
+
+2. **Manual Video Upload**: For custom video handling, use `wandb.Video()`:
+```python
+video_file = "videos/episode-0.mp4"
+wandb.log({
+    "video": wandb.Video(video_file, fps=30, format="mp4"),
+    "global_step": global_step
+})
+```
+
+3. **Video Tables with Global Step**: Log videos to WandB tables for better organization:
+```python
+# Create table with INCREMENTAL mode for ongoing updates
+video_table = wandb.Table(
+    columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
+    log_mode="INCREMENTAL"
+)
+
+# Add video data
+video_table.add_data(
+    global_step,
+    episode_num,
+    wandb.Video(video_path, fps=30, format="mp4"),
+    episode_return,
+    episode_length,
+    success_rate,
+    final_distance
+)
+
+# Log the table
+wandb.log({"video_table": video_table}, step=global_step)
+```
+
+4. **Environment Setup**: For headless servers, use OSMesa rendering:
+```python
+import os
+os.environ['MUJOCO_GL'] = 'osmesa'
+```
+
+5. **Video Recording**: Use `gym.wrappers.RecordVideo`:
+```python
+env = gym.wrappers.RecordVideo(
+    env, 
+    video_folder="videos/run_name",
+    episode_trigger=lambda x: x % 10 == 0,  # Record every 10 episodes
+    disable_logger=True
+)
+```
+
+Reference implementation: `gr00t-rl/scripts/train_ppo_fetch_with_video_table.py`
+
 ### WandB Logging Best Practices
 
 #### Enable Logging at Every Step

@@ -305,7 +305,14 @@ def train(args):
         # Get data from buffer
         buffer_output = buffer.get(batch_size=None)
         if hasattr(buffer_output, '__next__'):
-            rollout_data = next(buffer_output)
+            try:
+                rollout_data = next(buffer_output)
+            except StopIteration as e:
+                # If StopIteration has a value, that's our data
+                if hasattr(e, 'value') and e.value is not None:
+                    rollout_data = e.value
+                else:
+                    raise
         else:
             rollout_data = buffer_output
         

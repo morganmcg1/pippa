@@ -1007,3 +1007,97 @@ Since all experiments used different evaluation datasets:
 - All numbers are incomparable!
 
 Need to run `reevaluate_available_models.py` to get true `arithmetic_eval` scores on the standardized 200-problem dataset.
+
+## Periodic Evaluation Implementation Fix (2025-06-15)
+
+### Issue Discovered
+The periodic evaluation callbacks in the running experiments aren't actually computing or logging evaluation metrics. The callback triggers (prints "Running periodic evaluation") but no metrics appear in WandB.
+
+### Root Cause
+GRPOTrainer doesn't properly pass the trainer object to callbacks in the expected way. The `kwargs.get("model")` in callbacks doesn't return the trainer instance, preventing access to the model and tokenizer.
+
+### Solution
+Created `train_grpo_manual_eval.py` with a fixed callback implementation:
+
+```python
+class ManualEvalCallback(TrainerCallback):
+    def __init__(self, eval_every_n_epochs=5):
+        self.eval_every_n_epochs = eval_every_n_epochs
+        self.trainer = None
+    
+    def on_train_begin(self, args, state, control, **kwargs):
+        # Store trainer reference at training start
+        self.trainer = kwargs.get('model', None)
+    
+    def on_epoch_end(self, args, state, control, **kwargs):
+        # Use on_epoch_end for reliable triggering
+        current_epoch = state.epoch if state.epoch else 0
+        if int(current_epoch) % self.eval_every_n_epochs == 0:
+            trainer = self.trainer or kwargs.get('model', None)
+            if trainer:
+                eval_metrics = evaluate_on_standard_dataset(
+                    trainer.model, trainer.tokenizer, device
+                )
+                # Log with eval_ prefix for WandB visibility
+                wandb.log(eval_metrics, step=state.global_step)
+```
+
+### Key Learnings
+1. Use `on_epoch_end` instead of `on_log` for more reliable triggering
+2. Store trainer reference in `on_train_begin` 
+3. Always prefix evaluation metrics with `eval_` for WandB dashboard visibility
+4. Log with current `global_step` for proper time alignment
+5. The standard HuggingFace `evaluation_strategy` doesn't work with GRPOTrainer
+
+### Current Experiment Status (2025-06-15_06:40 UTC)
+Three experiments running without proper periodic evaluation:
+- **smaller_numbers_periodic_eval** (hc3kqbsf): Epoch 19.1, 81.3% training reward
+- **progressive_difficulty** (f3jgb9rg): Epoch 9.3, 83.3% training reward  
+- **small_numbers_enhanced** (1747qx62): Epoch 5.4, 70.6% training reward
+
+These experiments will complete but without intermediate evaluation data. Final evaluation will still run.
+
+## Periodic Evaluation Experiment Results (2025-06-15_07:30 UTC)
+
+### Completed Experiments
+
+1. **smaller_numbers_periodic_eval** - Run ID: hc3kqbsf ✅
+   - **Training**: 75 epochs, 85.2% training reward
+   - **Standardized eval: 42.0%** (84/200 correct)
+   - Close to our previous best of 45.5%!
+   - Breakdown:
+     - Very Easy (0-5): 60.0%
+     - Easy (0-10): 57.5%
+     - Medium: 32.0%
+     - Hard: 22.5%
+     - Very Hard: 45.0%
+   - Operations: Division best (84.6%), Addition good (46.7%), Multiplication/Subtraction weaker
+
+2. **progressive_difficulty** - Run ID: f3jgb9rg ❌
+   - **Training**: 60 epochs, 85.8% training reward
+   - **Standardized eval: 26.5%** (53/200 correct) - WORSE than baseline!
+   - Curriculum learning approach failed
+   - Starting with easy problems (0-5 addition only) didn't help generalization
+   - Performance degraded compared to mixed training
+
+3. **small_numbers_enhanced** - Run ID: 1747qx62 🏃
+   - **Still running**: 59.3 epochs, 93.1% training reward (highest!)
+   - Using 32 generations, priming examples, adaptive LR
+   - Will update when complete
+
+### Key Learnings
+
+1. **Smaller numbers (0-10) approach validated**: Achieved 42.0%, close to best result
+2. **Curriculum learning failed**: Progressive difficulty (26.5%) performed worse than baseline (38%)
+3. **High training reward ≠ good generalization**: All experiments reached 85%+ training reward
+4. **Periodic evaluation not logged**: Due to GRPOTrainer callback issues, no intermediate evaluations were captured
+
+### Next Steps
+
+1. Wait for `small_numbers_enhanced` to complete
+2. Launch new experiments with fixed periodic evaluation (`train_grpo_manual_eval.py`)
+3. Try these approaches:
+   - **Ultra-high generations**: 64 generations for maximum diversity
+   - **Weighted sampling**: Oversample harder problems during training
+   - **Multi-stage training**: Train on easy first, then fine-tune on full dataset
+   - **Different model sizes**: Try Qwen2-1.5B for more capacity
