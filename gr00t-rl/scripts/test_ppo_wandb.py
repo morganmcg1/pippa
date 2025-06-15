@@ -402,8 +402,8 @@ def main():
     # Ensure we have WandB credentials
     if not os.getenv("WANDB_API_KEY"):
         print("Warning: WANDB_API_KEY not found in environment")
-        print("Please set up .env file with WANDB_API_KEY")
-        return False
+        print("Running in offline mode - results will not be uploaded to WandB")
+        os.environ["WANDB_MODE"] = "offline"
     
     tests = [
         ("Pendulum Training Test", test_pendulum_with_logging),
