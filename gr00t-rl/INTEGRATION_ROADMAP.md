@@ -8,11 +8,18 @@
 - Comprehensive logging with WandB
 - Verified implementation correctness
 
-### 🚧 Phase 2: Isaac Lab Integration (NEXT)
+### 🚧 Phase 2: Isaac Lab Integration (IN PROGRESS)
 Based on research findings:
 - No official GR00T+PPO example exists yet
 - Isaac Lab has PPO infrastructure via rsl_rl, rl_games, skrl
 - Need ~200 lines of glue code to connect GR00T to RL runners
+
+Progress:
+- ✅ Created GR00T actor-critic wrapper (algorithms/gr00t_wrapper.py)
+- ✅ Built Isaac Lab training script (scripts/train_isaac_ppo.py)
+- ✅ Added configuration system (configs/isaac_lab_ppo_cfg.py)
+- ✅ Deployed to GPU machine (192.222.53.15)
+- 🚧 Installing Isaac Lab dependencies
 
 ### 📋 Phase 3: GR00T Model Integration
 - GR00T uses DiT-based action head (not Gaussian)
@@ -130,8 +137,14 @@ When implementing GRPO:
 
 ## Next Steps
 
-1. Install Isaac Lab dependencies
-2. Run baseline PPO on simple Isaac env
-3. Create GR00T policy wrapper
-4. Test integration with frozen backbone
-5. Compare PPO vs GRPO performance
+1. ✅ Code deployed to GPU machine
+2. ✅ Isaac Lab and rsl_rl cloned
+3. 🚧 Install Isaac Lab dependencies (in progress)
+4. Test integration script: `uv run python scripts/test_isaac_integration.py`
+5. Run baseline PPO on simple Isaac env
+6. Compare PPO vs GRPO performance
+
+## Current Session
+- **tmux session**: `isaac_setup` on ubuntu@192.222.53.15
+- **Location**: ~/pippa/IsaacLab
+- **Next command**: `./isaaclab.sh --install`

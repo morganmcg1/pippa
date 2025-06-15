@@ -5,7 +5,11 @@ Implement RL fine-tuning (PPO and GRPO) for NVIDIA's GR00T 1.5 robotic foundatio
 
 ## Current Status
 - ✅ **Phase 1 Complete**: State-of-the-art PPO implementation with all 37 details
-- 🚧 **Phase 2 Starting**: Isaac Lab integration (no official example exists)
+- 🚧 **Phase 2 In Progress**: Isaac Lab integration
+  - ✅ Created GR00T actor-critic wrapper
+  - ✅ Built training script for Isaac Lab connection
+  - ✅ Test integration script ready
+  - 🚧 Isaac Lab installation in progress on GPU machine
 - 📋 **Research Complete**: Comprehensive analysis of GRPO for robotics
 
 ## Key Findings
@@ -38,8 +42,10 @@ Implement RL fine-tuning (PPO and GRPO) for NVIDIA's GR00T 1.5 robotic foundatio
 ## Implementation Plan
 
 ### This Week
-- [ ] Install Isaac Lab environment
-- [ ] Create GR00T wrapper
+- [x] Code deployed to GPU machine (192.222.53.15)
+- [x] Isaac Lab and rsl_rl cloned
+- [ ] Install Isaac Lab environment (in progress)
+- [x] Create GR00T wrapper (completed)
 - [ ] Run first integration test
 
 ### Next Week
@@ -74,5 +80,12 @@ Parallel Simulations (2048+ envs)
 - Docs: `INTEGRATION_ROADMAP.md`, `NEXT_STEPS.md`
 - Research: `research_journal/grpo_robotics_analysis.md`
 
-## Next Action
-Run: `cd IsaacLab && ./isaaclab.sh --install`
+## Next Actions
+1. Complete Isaac Lab installation: `cd IsaacLab && ./isaaclab.sh --install`
+2. Run integration test: `cd gr00t-rl && uv run python scripts/test_isaac_integration.py`
+3. Test PPO on simple Isaac Lab environment
+
+## GPU Machine Access
+- SSH: `ssh ubuntu@192.222.53.15`
+- Code location: `~/pippa/gr00t-rl/`
+- GPU status: 4x H100 available (one in use ~25GB)

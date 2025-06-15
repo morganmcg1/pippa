@@ -2,16 +2,18 @@
 
 ## Immediate Actions (Today/Tomorrow)
 
-### 1. Environment Setup
+### 1. Environment Setup ✅ (Partially Complete)
 ```bash
-# Clone required repositories
-cd /Users/morganmcguire/ML/robotty
-git clone https://github.com/NVIDIA/Isaac-GR00T
-git clone https://github.com/isaac-sim/IsaacLab
-git clone https://github.com/leggedrobotics/rsl_rl
+# ✅ Code deployed to GPU machine: ubuntu@192.222.53.15
+# ✅ Repositories cloned to ~/pippa/:
+#   - IsaacLab
+#   - rsl_rl
+#   - gr00t-rl (our implementation)
 
-# Install Isaac Lab dependencies
-cd IsaacLab
+# 🚧 IN PROGRESS: Install Isaac Lab
+ssh ubuntu@192.222.53.15
+tmux attach -t isaac_setup  # Existing session
+cd ~/pippa/IsaacLab
 ./isaaclab.sh --install
 ```
 
@@ -32,7 +34,7 @@ uv run python scripts/train_ppo_v2.py --env Pendulum-v1 --num-envs 16
 
 ## This Week's Goals
 
-### 1. Create GR00T Wrapper (2-3 days)
+### 1. Create GR00T Wrapper ✅ (COMPLETED)
 ```python
 # gr00t-rl/algorithms/gr00t_wrapper.py
 class GR00TActorCritic(nn.Module):
@@ -129,7 +131,8 @@ grpo_configs = [
 
 ### Week 1 Success:
 - [ ] PPO training runs without crashes
-- [ ] GR00T wrapper integrated
+- [x] GR00T wrapper integrated (gr00t_wrapper.py created)
+- [x] Training script ready (train_isaac_ppo.py)
 - [ ] Baseline performance recorded
 - [ ] Memory usage acceptable (<40GB)
 
