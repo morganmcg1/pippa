@@ -17,7 +17,7 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from algorithms.ppo_gr00t_v2 import PPOGr00tActorCriticV2
-from configs.ppo_config_v2 import PPOConfig
+# from configs.ppo_config_v2 import PPOConfigV2  # Not used in this script
 from environments.fetch_wrapper import FetchGoalWrapper
 from environments.vec_isaac_env import make_vec_env, SubprocVecEnv, DummyVecEnv
 from utils.buffers import RolloutBuffer
