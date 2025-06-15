@@ -1053,5 +1053,26 @@ python scripts/train_ppo_gr00t.py \
 - ✅ PPO/GRPO training runs successfully
 - ✅ GR00T Lite model integrated and tested
 - ✅ GR00T policy wrapper created
+- ✅ Video table logging proven to work correctly
 - 🚧 Isaac-GR00T installation pending
 - 📝 Next: Load full GR00T N1.5 model for training
+
+### Video Table Logging
+When training RL agents with video recording:
+1. Create a table with columns like ["step", "episode", "video", "return", "length", "success"]
+2. Set `log_mode="INCREMENTAL"` for ongoing updates
+3. **Critical**: Check for videos after EVERY rollout, not just at the end
+4. Parse episode numbers from filenames carefully:
+   - Handle both "rl-video-episode-0.mp4" and "episode-0.mp4" formats
+   - Use `if "episode-" in filename:` to detect valid video files
+5. **Critical**: Log the table IMMEDIATELY after adding each video:
+   ```python
+   video_table.add_data(...)
+   wandb.log({"video_table": video_table}, step=global_step)
+   ```
+6. Use try-finally blocks to ensure `wandb.finish()` is called even if training crashes
+7. For balanced video generation, record every 5 episodes (not every episode)
+8. Short episodes (50-100 steps) ensure videos complete quickly
+9. Always call `wandb.finish()` in the finally block to ensure table data uploads
+
+**Key Learning from Test (2025-06-15)**: Videos DO generate correctly, but with long episodes (2400+ steps) and 4 parallel envs, they appear slowly. The test script with 50-step episodes successfully uploaded 19 videos, proving the implementation works.

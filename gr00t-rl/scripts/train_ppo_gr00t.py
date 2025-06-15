@@ -59,11 +59,11 @@ def make_fetch_env(env_id: str, idx: int, capture_video: bool, run_name: str,
         )
         
         if capture_video and idx == 0:
-            # Record every episode for debugging (change back to % 5 for production)
+            # Record every 5 episodes (balanced frequency)
             print(f"Adding RecordVideo wrapper to env {idx} with path: videos/{run_name}")
             env = gym.wrappers.RecordVideo(
                 env, f"videos/{run_name}",
-                episode_trigger=lambda episode_id: True,  # Record every episode
+                episode_trigger=lambda episode_id: episode_id % 5 == 0,
                 name_prefix=f"episode",
                 disable_logger=True
             )
@@ -89,128 +89,128 @@ def train(args):
         # Setup WandB logging
         if args.track and WANDB_AVAILABLE:
             wandb_run = wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            config=vars(args),
-            name=run_name,
-            save_code=True,
-            tags=["gr00t-rl", "ppo", "groot-model", args.env_id, args.reward_mode],
-            monitor_gym=False,
-            mode="online"
-        )
-        # Define custom x-axis
-        wandb.define_metric("global_step")
-        wandb.define_metric("*", step_metric="global_step")
+                project=args.wandb_project_name,
+                entity=args.wandb_entity,
+                config=vars(args),
+                name=run_name,
+                save_code=True,
+                tags=["gr00t-rl", "ppo", "groot-model", args.env_id, args.reward_mode],
+                monitor_gym=False,
+                mode="online"
+            )
+            # Define custom x-axis
+            wandb.define_metric("global_step")
+            wandb.define_metric("*", step_metric="global_step")
+            
+            # Create video table
+            video_table = wandb.Table(
+                columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
+                log_mode="INCREMENTAL"
+            )
         
-        # Create video table
-        video_table = wandb.Table(
-            columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
-            log_mode="INCREMENTAL"
+        # Setup tensorboard writer
+        writer = SummaryWriter(f"runs/{run_name}")
+        writer.add_text(
+            "hyperparameters",
+            "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
         )
         
-    # Setup tensorboard writer
-    writer = SummaryWriter(f"runs/{run_name}")
-    writer.add_text(
-        "hyperparameters",
-        "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
-    )
-    
-    # Seeding
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.backends.cudnn.deterministic = args.torch_deterministic
-    
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    
-    # Create environments
-    print(f"Creating {args.num_envs} environments with capture_video={args.capture_video}")
-    env_fns = [make_fetch_env(args.env_id, i, args.capture_video, run_name, 
-                              args.observation_mode, args.reward_mode) 
-               for i in range(args.num_envs)]
-    
-    if args.num_envs > 1:
-        envs = SubprocVecEnv(env_fns)
-    else:
-        envs = DummyVecEnv(env_fns)
-    
-    # Create GR00T model
-    if args.use_groot_lite:
-        print("Using GR00T Lite model for testing...")
-        model = GR00TRLPolicyLite(
-            observation_space=envs.observation_space,
-            action_dim=envs.action_space.shape[0],
-            hidden_dims=(256, 256),
-            device=device
-        ).to(device)
-    else:
-        print(f"Loading GR00T model: {args.groot_model_path}...")
-        try:
-            model = GR00TRLPolicy(
-                model_name_or_path=args.groot_model_path,
-                action_dim=envs.action_space.shape[0],
-                device=device,
-                embodiment_tag=args.embodiment_tag,
-                freeze_vision=args.freeze_vision,
-                freeze_language=args.freeze_language,
-                add_value_head=True
-            ).to(device)
-            print("GR00T model loaded successfully!")
-        except Exception as e:
-            print(f"Failed to load GR00T model: {e}")
-            print("Falling back to GR00T Lite model...")
+        # Seeding
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        torch.backends.cudnn.deterministic = args.torch_deterministic
+        
+        device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+        
+        # Create environments
+        print(f"Creating {args.num_envs} environments with capture_video={args.capture_video}")
+        env_fns = [make_fetch_env(args.env_id, i, args.capture_video, run_name, 
+                                  args.observation_mode, args.reward_mode) 
+                   for i in range(args.num_envs)]
+        
+        if args.num_envs > 1:
+            envs = SubprocVecEnv(env_fns)
+        else:
+            envs = DummyVecEnv(env_fns)
+        
+        # Create GR00T model
+        if args.use_groot_lite:
+            print("Using GR00T Lite model for testing...")
             model = GR00TRLPolicyLite(
                 observation_space=envs.observation_space,
                 action_dim=envs.action_space.shape[0],
                 hidden_dims=(256, 256),
                 device=device
             ).to(device)
-    
-    # Count parameters
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
-    
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, eps=1e-5)
-    
-    # Create rollout buffer
-    buffer = RolloutBuffer(
-        buffer_size=args.num_steps,
-        observation_space=envs.observation_space,
-        action_space=envs.action_space,
-        device=device.type,
+        else:
+            print(f"Loading GR00T model: {args.groot_model_path}...")
+            try:
+                model = GR00TRLPolicy(
+                    model_name_or_path=args.groot_model_path,
+                    action_dim=envs.action_space.shape[0],
+                    device=device,
+                    embodiment_tag=args.embodiment_tag,
+                    freeze_vision=args.freeze_vision,
+                    freeze_language=args.freeze_language,
+                    add_value_head=True
+                ).to(device)
+                print("GR00T model loaded successfully!")
+            except Exception as e:
+                print(f"Failed to load GR00T model: {e}")
+                print("Falling back to GR00T Lite model...")
+                model = GR00TRLPolicyLite(
+                    observation_space=envs.observation_space,
+                    action_dim=envs.action_space.shape[0],
+                    hidden_dims=(256, 256),
+                    device=device
+                ).to(device)
+        
+        # Count parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Total parameters: {total_params:,}")
+        print(f"Trainable parameters: {trainable_params:,}")
+        
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, eps=1e-5)
+        
+        # Create rollout buffer
+        buffer = RolloutBuffer(
+            buffer_size=args.num_steps,
+            observation_space=envs.observation_space,
+            action_space=envs.action_space,
+            device=device.type,
         gamma=args.gamma,
         gae_lambda=args.gae_lambda,
         n_envs=args.num_envs
     )
     
-    # Initialize tracking variables
-    global_step = 0
-    start_time = time.time()
-    next_obs, _ = envs.reset()
-    next_obs = torch.Tensor(next_obs).to(device)
-    next_done = torch.zeros(args.num_envs).to(device)
-    
-    # Tracking for episodes
-    episode_count = 0
-    env0_episode_count = 0
-    recent_episodes = deque(maxlen=100)
-    video_episode_tracker = {}
-    
-    # Training loop
-    num_updates = args.total_timesteps // args.batch_size
-    
-    for update in range(1, num_updates + 1):
-        # Annealing learning rate
-        if args.anneal_lr:
-            frac = 1.0 - (update - 1.0) / num_updates
-            lrnow = frac * args.learning_rate
-            optimizer.param_groups[0]["lr"] = lrnow
+        # Initialize tracking variables
+        global_step = 0
+        start_time = time.time()
+        next_obs, _ = envs.reset()
+        next_obs = torch.Tensor(next_obs).to(device)
+        next_done = torch.zeros(args.num_envs).to(device)
         
-        # Collect rollout
-        update_episodes = []
-        videos_logged = False  # Reset for each update
+        # Tracking for episodes
+        episode_count = 0
+        env0_episode_count = 0
+        recent_episodes = deque(maxlen=100)
+        video_episode_tracker = {}
+    
+        # Training loop
+        num_updates = args.total_timesteps // args.batch_size
+        
+        for update in range(1, num_updates + 1):
+            # Annealing learning rate
+            if args.anneal_lr:
+                frac = 1.0 - (update - 1.0) / num_updates
+                lrnow = frac * args.learning_rate
+                optimizer.param_groups[0]["lr"] = lrnow
+        
+            # Collect rollout
+            update_episodes = []
+            videos_logged = False  # Reset for each update
         
         for step in range(0, args.num_steps):
             global_step += args.num_envs
@@ -274,28 +274,40 @@ def train(args):
                             "global_step": global_step,
                         })
         
-        # Check for new videos
+        # Check for new videos after EVERY rollout (key learning from test script)
         if args.track and WANDB_AVAILABLE and args.capture_video:
             video_dir = Path(f"videos/{run_name}")
             if video_dir.exists():
                 video_files = sorted(video_dir.glob("*.mp4"))
                 
                 # Debug logging
-                if video_files and update % 10 == 0:
-                    print(f"  Found {len(video_files)} video files")
+                if update % 10 == 0:
+                    print(f"  Checking for videos... found {len(video_files)} files")
                     print(f"  Video tracker has {len(video_episode_tracker)} episodes")
+                    print(f"  Env 0 episode count: {env0_episode_count}")
                 
                 for video_file in video_files:
                     try:
-                        parts = video_file.stem.split('-')
-                        episode_num = int(parts[-1])
+                        # Extract episode number from filename
+                        # Handle both "rl-video-episode-0.mp4" and "episode-0.mp4" formats
+                        filename = video_file.stem
+                        if "episode-" in filename:
+                            parts = filename.split("episode-")
+                            episode_num = int(parts[-1])
+                        else:
+                            continue
                         
+                        # Check if we have data for this episode and haven't logged it yet
                         if episode_num in video_episode_tracker and not video_episode_tracker[episode_num].get("logged", False):
                             ep_info = video_episode_tracker[episode_num]
                             ep_data = ep_info["episode_data"]
                             
+                            print(f"  Found new video: {video_file.name} (episode {episode_num})")
+                            
+                            # Create video object
                             video_obj = wandb.Video(str(video_file), fps=30, format="mp4")
                             
+                            # Add to table
                             video_table.add_data(
                                 ep_info["global_step"],
                                 episode_num,
@@ -308,11 +320,15 @@ def train(args):
                             
                             videos_logged = True
                             video_episode_tracker[episode_num]["logged"] = True
-                            print(f"  Added video for episode {episode_num} to table")
+                            print(f"  ✓ Added video for episode {episode_num} to table")
                             
-                    except (ValueError, IndexError) as e:
+                            # Log table immediately after adding video (key learning)
+                            wandb.log({"video_table": video_table}, step=ep_info["global_step"])
+                            print(f"  ✓ Logged table to WandB (step {ep_info['global_step']})")
+                            
+                    except Exception as e:
                         if update % 10 == 0:
-                            print(f"  Failed to process video {video_file}: {e}")
+                            print(f"  Error processing {video_file}: {e}")
                         continue
         
         # Compute returns and advantages

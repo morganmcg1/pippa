@@ -1340,3 +1340,104 @@ reward_function = rich_reward_function  # Partial credit based on distance
 2. **Combine with other successes**: Rich rewards + mixed tasks
 3. **Fine-tune reward schedule**: Optimize the partial credit thresholds
 4. **Test on larger models**: Rich rewards + Qwen2-1.5B could reach 90%+
+
+## Latest Rich Rewards Experiments (2025-06-15 Evening)
+
+### Experiment Results Summary
+
+#### 1. Rich Rewards + Mixed Tasks - Run ID: k1rl8ekr - FAILED ❌
+- **Final accuracy**: 29.5% (59/200) - Much worse than 75%!
+- **Training reward**: 49.5%
+- **Configuration**: 50% arithmetic, 25% counting, 25% comparison with rich rewards
+- **Analysis**: Mixed tasks diluted the learning signal, model confused by different reward schemes
+
+#### 2. Rich Rewards Full Range - Run ID: r6iehkog - FAILED ❌  
+- **Final accuracy**: 32.5% (65/200) - Worse than baseline!
+- **Training reward**: 87.3%
+- **Configuration**: 0-20 number range with rich rewards
+- **Analysis**: Larger number range made task too difficult despite rich rewards
+
+#### 3. Rich Rewards Optimized - Run ID: ewna3jem - FAILED ❌
+- **Final accuracy**: 44.5% (89/200) - Worse than original 75%
+- **Training reward**: 81.4%
+- **Configuration**: Exponential decay rewards instead of stepped
+- **Analysis**: Smooth exponential decay less effective than discrete reward steps
+
+#### 4. Rich Early Stopping - Run ID: fqd8ljvg - FAILED ❌
+- **Final accuracy**: 46.0% (92/200) - Much worse than 75%
+- **Training reward**: 36.3%
+- **Configuration**: Rich rewards with early stopping at epoch 30
+- **Analysis**: Completed full 30 epochs without early stop, still underperformed
+
+#### 5. Rich Ensemble - Run ID: 92brxuex - FAILED ❌
+- **Final accuracy**: 47.0% (94/200) - Ensemble didn't help
+- **Individual models**: 46.5%, 44.5%, 22.0%
+- **Analysis**: Ensemble of 3 models with different seeds didn't improve on single model
+
+#### 6. Rich Curriculum - Run ID: koczbd9a - CATASTROPHIC FAILURE ❌
+- **Final accuracy**: Failed after Stage 1 with 33.0%
+- **Training reward**: 65.2% at failure
+- **Configuration**: 3-stage curriculum (0-5 → 0-7 → 0-10)
+- **Analysis**: Curriculum learning continues to fail with arithmetic
+
+### Critical Discovery: Original Rich Rewards Configuration is Optimal
+
+Despite trying 6 different variations, **none could beat the original 75% accuracy**. The winning configuration remains:
+
+```python
+# OPTIMAL CONFIGURATION - 75% accuracy
+model = "Qwen/Qwen2-0.5B-Instruct"
+dataset = 130 samples, 0-10 range
+batch_size = 256
+num_generations = 16
+learning_rate = 5e-6
+temperature = 0.7
+epochs = 50
+beta = 0.1
+
+# Stepped reward schedule (NOT exponential)
+correct: +1.0
+off by 1: +0.7
+off by 2: +0.4
+off by 3-5: +0.1
+off by 6-10: -0.2
+off by >10: -0.5
+non-numeric: -1.0
+```
+
+### Why Variations Failed
+
+1. **Mixed tasks**: Different reward schemes for counting/comparison confused the model
+2. **Larger number range (0-20)**: Too difficult even with rich rewards
+3. **Exponential decay**: Less effective than clear stepped boundaries
+4. **Early stopping**: Model needs full 50 epochs to reach potential
+5. **Ensemble**: Individual models too weak, majority voting didn't help
+6. **Curriculum**: Starting easy doesn't bootstrap arithmetic learning
+
+### Key Insight: Simplicity Wins
+
+The original rich rewards approach with:
+- Simple stepped rewards (not smooth curves)
+- Single task type (pure arithmetic)
+- Moderate range (0-10)
+- Standard training (50 epochs)
+
+...remains unbeaten at 75% accuracy.
+
+### New Experiments Launched (2025-06-15 Evening)
+
+Based on learnings, launched more targeted experiments:
+
+#### 1. Temperature Exploration (0.5) - Run ID: TBD
+- Lower temperature for more focused generation
+- Everything else same as 75% baseline
+
+#### 2. Deeper Reward Schedule - Run ID: TBD
+- More granular steps: off by 1 (0.8), 2 (0.6), 3 (0.45), etc.
+- Hypothesis: Finer feedback gradients might push past 75%
+
+#### 3. Extended Training (100 epochs) - Run ID: TBD
+- Same as 75% baseline but train longer
+- Includes periodic evaluation every 10 epochs
+
+These experiments test specific hypotheses while maintaining the core successful approach.

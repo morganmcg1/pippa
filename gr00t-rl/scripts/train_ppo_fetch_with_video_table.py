@@ -87,28 +87,28 @@ def train(args):
         # Setup WandB logging first
         if args.track and WANDB_AVAILABLE:
             wandb_run = wandb.init(
-            project=args.wandb_project_name,
-            entity=args.wandb_entity,
-            config=vars(args),
-            name=run_name,
-            save_code=True,
-            tags=["gr00t-rl", "ppo", "fetch", args.env_id, args.reward_mode],
-            monitor_gym=False,  # We'll handle video logging manually
-            mode="online"
-        )
-        # Define custom x-axis
-        wandb.define_metric("global_step")
-        wandb.define_metric("episode_step")
-        wandb.define_metric("*", step_metric="global_step")
-        
-        # Create video table with INCREMENTAL mode for ongoing updates
-        video_table = wandb.Table(
-            columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
-            log_mode="INCREMENTAL"
-        )
-        
-        # Track if we've logged any videos yet
-        videos_logged = False
+                project=args.wandb_project_name,
+                entity=args.wandb_entity,
+                config=vars(args),
+                name=run_name,
+                save_code=True,
+                tags=["gr00t-rl", "ppo", "fetch", args.env_id, args.reward_mode],
+                monitor_gym=False,  # We'll handle video logging manually
+                mode="online"
+            )
+            # Define custom x-axis
+            wandb.define_metric("global_step")
+            wandb.define_metric("episode_step")
+            wandb.define_metric("*", step_metric="global_step")
+            
+            # Create video table with INCREMENTAL mode for ongoing updates
+            video_table = wandb.Table(
+                columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
+                log_mode="INCREMENTAL"
+            )
+            
+            # Track if we've logged any videos yet
+            videos_logged = False
         
         # Setup tensorboard writer
         writer = SummaryWriter(f"runs/{run_name}")
