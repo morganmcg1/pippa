@@ -76,9 +76,17 @@ def train(args):
     """Main training loop for PPO with Fetch environments."""
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
     
-    # Setup WandB logging first
-    if args.track and WANDB_AVAILABLE:
-        wandb_run = wandb.init(
+    # Initialize variables for cleanup
+    wandb_run = None
+    writer = None
+    envs = None
+    video_table = None
+    global_step = 0
+    
+    try:
+        # Setup WandB logging first
+        if args.track and WANDB_AVAILABLE:
+            wandb_run = wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
             config=vars(args),
@@ -474,21 +482,49 @@ def train(args):
             "final_avg_return": recent_avg_return,
         })
         
-        # Log final complete video table as IMMUTABLE
-        if hasattr(video_table, 'data') and video_table.data:
-            final_video_table = wandb.Table(
-                columns=video_table.columns,
-                data=video_table.data,
-                log_mode="IMMUTABLE"
-            )
-            wandb.log({"final_video_table": final_video_table})
-            print(f"\nLogged {len(video_table.data)} videos to final table")
+        # Final video table logging moved to finally block for safety
     
-    envs.close()
-    writer.close()
-    
-    if args.track and WANDB_AVAILABLE:
-        wandb.finish()
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user")
+    except Exception as e:
+        print(f"\nError during training: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Always clean up resources
+        print("\nCleaning up...")
+        
+        # Close environments
+        if envs is not None:
+            try:
+                envs.close()
+            except:
+                pass
+        
+        # Close tensorboard writer
+        if writer is not None:
+            try:
+                writer.close()
+            except:
+                pass
+        
+        # Finish WandB run - CRITICAL for uploading table data
+        if args.track and WANDB_AVAILABLE and wandb_run is not None:
+            try:
+                # Log any remaining video table data
+                if video_table is not None and len(video_table.data) > 0:
+                    print(f"\nLogging {len(video_table.data)} videos to final table...")
+                    final_video_table = wandb.Table(
+                        columns=video_table.columns,
+                        data=video_table.data,
+                        log_mode="IMMUTABLE"
+                    )
+                    wandb.log({"final_video_table": final_video_table})
+                    print("Logged final video table data")
+                wandb.finish()
+                print("WandB run finished successfully")
+            except Exception as e:
+                print(f"Error finishing WandB run: {e}")
 
 
 def main():

@@ -719,6 +719,57 @@ To see videos faster:
 - Use environments with shorter episodes
 - Record every episode instead of every 5 episodes
 
+### Critical: Always Call wandb.finish() (2025-06-15)
+**IMPORTANT**: Always ensure `wandb.finish()` is called when training stops to upload table data!
+
+All training scripts now use try-finally blocks to guarantee cleanup:
+```python
+def train(args):
+    # Initialize variables for cleanup
+    wandb_run = None
+    writer = None
+    envs = None
+    
+    try:
+        # Training code here
+        if args.track and WANDB_AVAILABLE:
+            wandb_run = wandb.init(...)
+        # ... rest of training ...
+    
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user")
+    except Exception as e:
+        print(f"\nError during training: {e}")
+        traceback.print_exc()
+    finally:
+        # Always clean up resources
+        print("\nCleaning up...")
+        
+        # Close environments and writer
+        if envs is not None:
+            try:
+                envs.close()
+            except:
+                pass
+                
+        # Finish WandB run - CRITICAL for uploading table data
+        if args.track and WANDB_AVAILABLE and wandb_run is not None:
+            try:
+                # Log any remaining video table data
+                if video_table is not None and videos_logged:
+                    wandb.log({"video_table": video_table}, step=global_step)
+                wandb.finish()
+                print("WandB run finished successfully")
+            except Exception as e:
+                print(f"Error finishing WandB run: {e}")
+```
+
+This ensures:
+1. Video tables are uploaded even if training is interrupted
+2. WandB runs are properly closed
+3. Resources are cleaned up properly
+4. Table data is not lost on early termination
+
 ### WandB Logging Best Practices
 
 #### Enable Logging at Every Step

@@ -77,9 +77,18 @@ def train(args):
     """Main training loop for PPO with GR00T model."""
     run_name = f"{args.env_id}__gr00t__{args.exp_name}__{args.seed}__{int(time.time())}"
     
-    # Setup WandB logging
-    if args.track and WANDB_AVAILABLE:
-        wandb_run = wandb.init(
+    # Initialize variables for cleanup
+    wandb_run = None
+    writer = None
+    envs = None
+    video_table = None
+    videos_logged = False
+    global_step = 0
+    
+    try:
+        # Setup WandB logging
+        if args.track and WANDB_AVAILABLE:
+            wandb_run = wandb.init(
             project=args.wandb_project_name,
             entity=args.wandb_entity,
             config=vars(args),
@@ -458,29 +467,61 @@ def train(args):
             print(f"  Value Loss: {metrics['value_loss']:.4f}")
             print(f"  Policy Loss: {metrics['policy_loss']:.4f}")
     
-    # Save final model
-    model_path = f"models/{run_name}.pt"
-    Path("models").mkdir(exist_ok=True)
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'args': args,
-        'final_success_rate': recent_success_rate,
-        'total_episodes': episode_count,
-    }, model_path)
-    print(f"\nModel saved to {model_path}")
-    print(f"Final success rate: {recent_success_rate:.2%}")
+        # Save final model
+        model_path = f"models/{run_name}.pt"
+        Path("models").mkdir(exist_ok=True)
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'args': args,
+            'final_success_rate': recent_success_rate,
+            'total_episodes': episode_count,
+        }, model_path)
+        print(f"\nModel saved to {model_path}")
+        print(f"Final success rate: {recent_success_rate:.2%}")
+        
+        if args.track and WANDB_AVAILABLE:
+            wandb.run.summary.update({
+                "final_success_rate": recent_success_rate,
+                "total_episodes": episode_count,
+                "final_avg_return": recent_avg_return,
+            })
     
-    if args.track and WANDB_AVAILABLE:
-        wandb.run.summary.update({
-            "final_success_rate": recent_success_rate,
-            "total_episodes": episode_count,
-            "final_avg_return": recent_avg_return,
-        })
-        wandb.finish()
-    
-    envs.close()
-    writer.close()
+    except KeyboardInterrupt:
+        print("\nTraining interrupted by user")
+    except Exception as e:
+        print(f"\nError during training: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Always clean up resources
+        print("\nCleaning up...")
+        
+        # Close environments
+        if envs is not None:
+            try:
+                envs.close()
+            except:
+                pass
+        
+        # Close tensorboard writer
+        if writer is not None:
+            try:
+                writer.close()
+            except:
+                pass
+        
+        # Finish WandB run - CRITICAL for uploading table data
+        if args.track and WANDB_AVAILABLE and wandb_run is not None:
+            try:
+                # Log any remaining video table data
+                if video_table is not None and videos_logged:
+                    wandb.log({"video_table": video_table}, step=global_step)
+                    print("Logged final video table data")
+                wandb.finish()
+                print("WandB run finished successfully")
+            except Exception as e:
+                print(f"Error finishing WandB run: {e}")
 
 
 def main():
