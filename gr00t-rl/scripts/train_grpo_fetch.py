@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import gymnasium as gym
+import gymnasium_robotics  # This import registers the Fetch environments
 from torch.utils.tensorboard import SummaryWriter
 from collections import defaultdict
 

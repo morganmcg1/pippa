@@ -7,6 +7,7 @@ Minimal dependencies for quick testing.
 import numpy as np
 import torch
 import gymnasium as gym
+import gymnasium_robotics  # This import registers the Fetch environments
 from pathlib import Path
 import sys
 

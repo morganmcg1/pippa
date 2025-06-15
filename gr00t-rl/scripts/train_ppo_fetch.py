@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import gymnasium as gym
+import gymnasium_robotics  # This import registers the Fetch environments
 from torch.utils.tensorboard import SummaryWriter
 
 import sys

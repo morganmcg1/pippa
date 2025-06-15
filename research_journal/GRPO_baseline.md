@@ -779,6 +779,29 @@ Based on the 54.7% breakthrough with mixed datasets and full diversity, here are
 
 Both experiments use WandB artifact logging (WANDB_LOG_MODEL=checkpoint) to enable model versioning and easy checkpoint loading.
 
+## IMPORTANT: Standardized Evaluation Dataset Created (2025-06-15)
+
+### Problem Discovered
+Previous experiments were evaluating on their own training datasets:
+- Mixed Dataset (0-20): Evaluated on 0-20 problems → 54.7% accuracy
+- Mixed Small Numbers (0-10): Evaluated on 0-10 problems → 60.7% accuracy
+- These accuracies are NOT comparable since 0-10 problems are inherently easier!
+
+### Solution: Standardized Arithmetic Evaluation Dataset
+Created and uploaded to HuggingFace: `morgan/arithmetic_eval`
+- 200 arithmetic problems with varying difficulty
+- Fixed test set for fair comparison across all experiments
+- Difficulty levels: very_easy (0-5), easy (0-10), medium (0-20), hard (10-50), very_hard (20-100)
+- Available at: https://huggingface.co/datasets/morgan/arithmetic_eval
+
+### Usage in All Future Experiments
+```python
+from datasets import load_dataset
+eval_dataset = load_dataset("morgan/arithmetic_eval", split="test")
+```
+
+**All previous accuracy numbers should be re-evaluated on this dataset for fair comparison!**
+
 ## BREAKTHROUGH: 60.7% Accuracy Achieved! (2025-06-15)
 
 ### Mixed Dataset + Small Numbers Success
