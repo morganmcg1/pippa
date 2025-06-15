@@ -3,11 +3,10 @@
 This file contains important instructions and learnings for Claude when working on this project.
 
 ## Research Journals
-
-For detailed experiment results and learnings, see the dedicated research journals:
-- **[research_journal/GRPO_baseline.md](./research_journal/GRPO_baseline.md)** - GRPO arithmetic experiments
-- **[research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md)** - GR00T robot model experiments  
-- **[research_journal/absolute_zero.md](./research_journal/absolute_zero.md)** - Absolute Zero self-play experiments
+For experiment-specific results and detailed analyses, see:
+- [GRPO Experiments](./research_journal/GRPO_baseline.md) - Arithmetic GRPO training results and learnings
+- [GR00T Experiments](./research_journal/gr00t_baseline.md) - Robot model fine-tuning experiments
+- [Absolute Zero](./research_journal/absolute_zero.md) - Self-play learning implementation
 
 ## File Management
 
@@ -150,169 +149,86 @@ This repository contains TWO SEPARATE experiment tracks running in parallel:
 - GRPO = Language model RL training with rewards
 - GR00T = Robot foundation model fine-tuning on demonstrations
 
-## Project Summary: GRPO Training Pipeline
+## Training Scripts Overview
 
-### Overview
-This project implements Dr GRPO (Group Relative Policy Optimization Done Right) for training language models with reinforcement learning. The implementation follows best practices from cleanRL and stable-baselines3.
-
-### Key Components
-
-#### 1. Training Scripts
-- **`train_grpo.py`**: Main Dr GRPO implementation
-  - Bias-free advantage computation (key Dr GRPO insight)
-  - Beta = 0.0 (no KL penalty) for rule-based rewards
-  - Support for multiple reward functions
-  - Proper seed management for reproducibility
-  - WandB integration when `track=True`
-
+### GRPO Training
+- **`train_grpo.py`**: Main Dr GRPO implementation with verifiable rewards
 - **`train_grpo_wandb.py`**: Simple wrapper that enables WandB tracking
+- **`train_grpo_with_standard_eval.py`**: Template with standardized evaluation
+- **`train_grpo_arithmetic_fixed_completions.py`**: Working baseline for arithmetic
 
-- **`train_grpo_verifiable.py`**: GRPO with verifiable rewards
-  - Arithmetic, counting, comparison, binary tasks
-  - Clear success/failure criteria
+### GR00T Training
+- **`gr00t-tuning/train_gr00t.py`**: NVIDIA GR00T robot model fine-tuning
+- **`gr00t-rl/scripts/train_ppo_fetch.py`**: PPO training on Fetch robotics tasks
 
-#### 2. Helper Scripts
-- **`remote_train.sh`**: Easy remote training with tmux
-
-### Essential Commands
-
-#### SSH and tmux
-```bash
-# SSH to H100 machine
-ssh ubuntu@192.222.52.59
-
-# Create/attach to tmux sessions
-ssh ubuntu@192.222.52.59 "tmux new-session -d -s grpo_training"
-
-# Attach to monitor training
-ssh ubuntu@192.222.52.59 -t "tmux attach -t grpo_training"
-
-# Send commands to tmux
-ssh ubuntu@192.222.52.59 "tmux send-keys -t grpo_training 'cd ~/pippa && git pull' Enter"
-```
-
-#### Environment Setup (in tmux)
-```bash
-export PATH=$HOME/.local/bin:$PATH
-export HF_HOME=/home/ubuntu/.cache/huggingface
-cd ~/pippa
-git pull
-```
-
-#### Running Training
-```bash
-# Basic GRPO training with WandB
-python train_grpo_wandb.py
-
-# Verifiable rewards training
-python train_grpo_verifiable.py --task arithmetic
-```
-
-#### Monitoring
-```bash
-# Check GPU utilization
-nvidia-smi --query-gpu=name,memory.used,memory.total,utilization.gpu,utilization.memory --format=csv
-
-# Check tmux output
-tmux capture-pane -t grpo_training -p | tail -50
-```
-
-### Configuration Details
-
-#### Default Model and Dataset
-- Model: `Qwen/Qwen2-0.5B-Instruct` (0.5B parameters)
-- Temperature: 0.7 (critical for generation diversity)
-- Beta: 0.0 for rule-based rewards, 0.1 for arithmetic tasks
-
-### WandB Integration
-- Entity: `wild-ai`
-- Project: `pippa`
-- Credentials in `.env` file (never commit!)
-- Automatic initialization when `track=True`
-- View runs at: https://wandb.ai/wild-ai/pippa
-
-### Repository Structure
+## Repository Structure
 ```
 pippa/
-├── train_grpo.py                 # Main Dr GRPO implementation
-├── train_grpo_wandb.py          # WandB wrapper  
-├── train_grpo_verifiable.py     # GRPO with verifiable rewards
-├── train_grpo_arithmetic_fixed_completions.py  # WORKING BASELINE for arithmetic
-├── train_grpo_with_standard_eval.py  # NEW TEMPLATE with standardized evaluation
+├── train_grpo*.py              # GRPO training scripts
 ├── grpo_archive/               # Archived GRPO experiments
 ├── research_journal/           # Experiment notes and results
-│   ├── GRPO_baseline.md       # GRPO arithmetic experiments journal
-│   ├── gr00t_baseline.md      # GR00T robot model experiments journal  
-│   └── absolute_zero.md       # Absolute Zero self-play experiments
-├── TRAINING_GUIDE.md            # Comprehensive training guide
-├── experiments/
-│   ├── README.md               # Experiments overview
-│   ├── overfitting_experiments_log.md  # Detailed experiment results
-│   └── failed_approaches/      # Failed experiments (echo tasks, etc.)
-├── arithmetic_eval_dataset/    # Local copy of standardized evaluation dataset
-├── run_verifiable_experiments.sh # Run all verifiable experiments
-├── gr00t-tuning/               # GR00T robot foundation model tuning (separate project)
-├── absolute_zero/              # Absolute Zero self-play implementation
-├── gr00t-rl/                   # Gymnasium robotics RL experiments
-├── remote_train.sh              # Remote training helper
-├── requirements.txt             # Python dependencies
-├── .env                        # Environment variables (gitignored)
-├── .env.example               # Example env file
-└── CLAUDE.md                  # This file (you are here)
+│   ├── GRPO_baseline.md       # GRPO arithmetic experiments
+│   ├── gr00t_baseline.md      # GR00T robot experiments  
+│   └── absolute_zero.md       # Self-play learning
+├── gr00t-tuning/               # GR00T robot model tuning
+├── gr00t-rl/                   # Gymnasium-robotics integration
+├── absolute_zero/              # Absolute Zero implementation
+├── experiments/                # Experiment archives
+├── TRAINING_GUIDE.md           # Training guide
+├── .env.example                # Example environment variables
+└── CLAUDE.md                   # This file
 ```
 
-### Codebase Organization Notes (2025-06-15)
-The codebase has been cleaned up for clarity:
-- **Core GRPO scripts** remain in the root directory (4 essential files)
-- **Experimental/debug scripts** moved to `grpo_archive/` directory
-- **Working baseline** (`train_grpo_arithmetic_fixed_completions.py`) kept in root
-- **Failed experiments** remain in `experiments/failed_approaches/`
-- **GR00T experiments** isolated in `gr00t-tuning/` subdirectory
-
-This organization makes it clear which scripts are actively used vs historical experiments.
-
-### Key Documentation
-- **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** - Step-by-step guide for using the training scripts
-- **[experiments/README.md](./experiments/README.md)** - Overview of all experiments and learnings
-- **[research_journal/GRPO_baseline.md](./research_journal/GRPO_baseline.md)** - GRPO arithmetic experiment results and learnings
-- **[research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md)** - GR00T robot model experiment results
-
-## Key Technical Learnings
-
-### GRPO Requirements
-1. **Verifiable Rewards**: GRPO requires deterministic, measurable outcomes (e.g., math answers, not free-form text)
-2. **Latent Understanding**: Model must already have capability - GRPO elicits, doesn't teach
-3. **Generation Diversity**: Temperature 0.7-1.0 essential for reward variance
-4. **KL Penalty for Arithmetic**: Use beta=0.1 for arithmetic tasks to prevent mode collapse
-
-### Common Issues and Solutions
+## Common Issues and Solutions
 1. **NumPy version conflict**: Install `numpy<2`
 2. **Keras error**: Install `tf-keras`
-3. **GSM8K loading**: Specify 'main' config: `load_dataset('openai/gsm8k', 'main')`
+3. **GSM8K loading**: Specify 'main' config
 4. **Low GPU usage**: Increase batch size and sequence lengths
 5. **WandB not logging**: Ensure `.env` file exists and `track=True`
 6. **DataLoader error with GRPO**: Batch size must be <= dataset size
 7. **Zero gradients in GRPO**: All rewards identical - no learning signal
 8. **Stuck at reward -1.0**: Model doesn't understand task format
 
-### GRPOTrainer Configuration Guide
+## GRPOTrainer Configuration Guide
 
-#### Critical Parameters
-- **`num_generations`**: Number of completions per prompt (default: 8, use 16 for better diversity)
-- **`beta`**: KL divergence coefficient (0.0 for rule-based rewards, 0.1 for arithmetic)
-- **`temperature`**: Controls generation randomness (0.7-1.0 for healthy diversity)
-- **`loss_type`**: Use "grpo" for arithmetic, "dr_grpo" for bias-free training
+### Key Parameters (from HuggingFace docs: https://huggingface.co/docs/trl/main/en/grpo_trainer)
 
-#### Batch Size Configuration
-- **IMPORTANT**: `per_device_train_batch_size` in GRPOConfig is the ACTUAL batch size
+#### Generation Settings
+- **`num_generations`**: Number of completions per prompt (default: 8)
+  - Increase for more diverse samples and better gradient estimates
+  - Trade-off with memory usage
+- **`max_prompt_length`**: Maximum prompt length (default: 512)
+- **`max_completion_length`**: Maximum completion length (default: 256)
+  - Shorter completions train faster
+- **`temperature`**: Controls generation randomness (default: 1.0)
+  - Lower values for more focused outputs
+
+#### Training Hyperparameters
+- **`beta`**: KL divergence coefficient (default: 0.0)
+  - Dr GRPO uses 0.0 to avoid bias
+- **`epsilon`**: Clipping value for policy updates (default: 0.2)
+- **`num_iterations`**: Optimization iterations per batch (default: 1)
+- **`loss_type`**: Can be "bnpo" or "dr_grpo"
+  - "dr_grpo" recommended for bias-free training
+
+#### Debugging and Monitoring
+- **`log_completions`**: Set to True to inspect generation quality
+- **`mask_truncated_completions`**: Use True for training stability
+- Monitor: `reward/mean`, `completions/mean_length`, `frac_reward_zero_std`
+
+### Advanced GRPO Configuration
+
+#### Critical Constraints:
+- **Batch Size Rule**: `effective_batch_size = batch_size * gradient_accumulation_steps * num_gpus`
+- **Must satisfy**: `effective_batch_size % num_generations == 0`
+- Example: batch_size=16, num_generations must be in [1, 2, 4, 8, 16]
+
+**IMPORTANT GRPO Batch Size Configuration**:
+- When using GRPOTrainer, the `per_device_train_batch_size` parameter in GRPOConfig is the ACTUAL batch size, not batch_size // num_generations
 - The effective batch size MUST be divisible by `num_generations`
-- Example: If batch_size=64 and num_generations=16, this works (64 ÷ 16 = 4)
-
-### Working Baseline Reference
-For a proven working configuration, see:
-- **File**: `train_grpo_arithmetic_fixed_completions.py`
-- **Achievement**: ~75% accuracy on arithmetic with rich rewards
-- **Key insight**: Rich reward functions (partial credit) dramatically improve learning
+- If you get an error like "effective train batch size (64) must be evenly divisible by num_generations (16)", you need to either:
+  1. Reduce `num_generations` to a divisor of your batch size (e.g., 4 instead of 16)
+  2. Increase your batch size to be a multiple of `num_generations`
 
 ## WandB Monitoring
 
@@ -320,106 +236,55 @@ For a proven working configuration, see:
 **IMPORTANT**: Always use the wandb MCP tool to check training progress instead of SSH/tmux commands. This is the default and preferred method.
 
 ### WandB Video Logging for Gymnasium Environments
-When using Gymnasium environments (like Fetch robotics tasks), ensure proper video logging to WandB:
+When using Gymnasium environments (like Fetch robotics tasks):
 
-1. **Basic Setup**: Add `monitor_gym=True` to `wandb.init()`:
-```python
-wandb.init(
-    project="pippa",
-    entity="wild-ai",
-    monitor_gym=True,  # Enables automatic Gymnasium video logging
-    tags=["gr00t-rl", "ppo", "fetch"],
-)
-```
+1. **Basic Setup**: Add `monitor_gym=True` to `wandb.init()`
+2. **Video Recording**: Use `gym.wrappers.RecordVideo` with episode triggers
+3. **Video Tables**: Use INCREMENTAL mode for ongoing updates
+4. **Headless Servers**: Set `os.environ['MUJOCO_GL'] = 'osmesa'`
+5. **Always Call `wandb.finish()`**: Use try-finally blocks to ensure table data uploads
 
-2. **Video Tables with Global Step**: Log videos to WandB tables for better organization:
-```python
-# Create table with INCREMENTAL mode for ongoing updates
-video_table = wandb.Table(
-    columns=["global_step", "episode", "video", "episode_return", "episode_length"],
-    log_mode="INCREMENTAL"
-)
-
-# Add video data and log immediately
-video_table.add_data(
-    global_step,
-    episode_num,
-    wandb.Video(video_path, fps=30, format="mp4"),
-    episode_return,
-    episode_length
-)
-wandb.log({"video_table": video_table}, step=global_step)
-```
-
-3. **Critical: Always Call wandb.finish()**
-Always ensure `wandb.finish()` is called when training stops to upload table data! Use try-finally blocks:
-```python
-try:
-    # Training code here
-    if args.track and WANDB_AVAILABLE:
-        wandb_run = wandb.init(...)
-    # ... training ...
-finally:
-    # Always clean up resources
-    if args.track and WANDB_AVAILABLE and wandb_run is not None:
-        wandb.finish()
-```
+Reference implementation: `gr00t-rl/scripts/train_ppo_fetch_with_video_table.py`
 
 ### WandB Logging Best Practices
 
 #### Enable Logging at Every Step
-**CRITICAL**: Always set `logging_steps=1` in your training configuration to ensure logging happens at every training step.
+**CRITICAL**: Always set `logging_steps=1` in your training configuration to ensure logging happens at every training step. This provides:
+- Real-time monitoring of training progress
+- Early detection of training issues (zero gradients, reward collapse)
+- Detailed learning curves for analysis
+- No missing data points during critical training phases
 
-#### Essential Metrics to Track
-- `train/reward`: Primary optimization target
-- `train/loss`: Training loss (watch for collapse to 0)
-- `train/grad_norm`: Gradient norms (should be non-zero)
-- `train/kl`: KL divergence from reference model
-- `train/frac_reward_zero_std`: Fraction of batches with zero reward std
-
-### Standardized Evaluation
-All GRPO experiments should use `morgan/arithmetic_eval` dataset for final evaluation:
+Example configuration:
 ```python
-from datasets import load_dataset
-eval_dataset = load_dataset("morgan/arithmetic_eval", split="test")
+config = GRPOConfig(
+    logging_steps=1,  # Log at every step - CRITICAL!
+    save_steps=100,   # Save checkpoints less frequently
+    # ... other parameters
+)
 ```
 
-## Gymnasium-Robotics Integration
+### WandB Tables for GRPO
+Log generation samples to WandB Tables for better visualization:
+- Create tables with columns: epoch, prompt, completion, reward, etc.
+- Use TRL callbacks (see `train_grpo_verifiable_callbacks.py`)
+- Monitor both training reward and evaluation accuracy
 
-### Training Scripts
-Key scripts for robotics training:
+### Gymnasium-Robotics and GR00T Integration
+
+#### Key Scripts
 - `gr00t-rl/scripts/train_ppo_fetch.py` - PPO training on Fetch tasks
 - `gr00t-rl/scripts/train_grpo_fetch.py` - GRPO training on Fetch tasks
 - `gr00t-rl/scripts/train_ppo_gr00t.py` - PPO with GR00T N1.5 model
+- `gr00t-rl/environments/fetch_wrapper.py` - Goal-conditioned wrapper
 
-Default configuration:
-- WandB tracking enabled by default (`--track=True`)
-- Video capture enabled by default (`--capture-video=True`)
-- Support for sparse/dense/distance reward modes
+#### GR00T N1.5 Components
+- **GR00T Policy Wrapper**: Handles actor-critic interface for PPO/GRPO
+- **Model**: 3B parameters, Eagle vision-language backbone
+- **Setup**: Use `./scripts/setup_isaac_groot.sh` for installation
 
-### GR00T N1.5 Integration
-GR00T N1.5 is NVIDIA's 3B parameter robot foundation model. We've integrated it for RL training:
-
-**Quick Test (Lite Model)**:
-```bash
-python scripts/train_ppo_gr00t.py --use-groot-lite True --num-envs 4 --reward-mode dense
-```
-
-**Full GR00T Model**:
-```bash
-# First install Isaac-GR00T
-./scripts/setup_isaac_groot.sh
-
-# Then train with full model
-python scripts/train_ppo_gr00t.py \
-    --use-groot-lite False \
-    --groot-model-path nvidia/GR00T-N1.5-3B \
-    --freeze-vision True \
-    --freeze-language True
-```
-
-## Absolute Zero Experiment
-For the Absolute Zero self-play algorithm implementation, see:
-- **[research_journal/absolute_zero.md](./research_journal/absolute_zero.md)** - Experiment details and results
-- **Directory**: `absolute_zero/` - Implementation code
-- **Based on**: https://arxiv.org/pdf/2505.03335v2
+#### Video Table Logging
+- Use INCREMENTAL mode for ongoing updates
+- Log tables immediately after adding data
+- Always use try-finally blocks with `wandb.finish()`
+- Record every 5 episodes for balanced video generation
