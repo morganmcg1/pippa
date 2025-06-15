@@ -321,7 +321,6 @@ def main():
         save_steps=100,
         report_to=["wandb"],
         remove_unused_columns=False,
-        num_workers=0,
         seed=args.seed,
         max_completion_length=16,
         loss_type="grpo",
