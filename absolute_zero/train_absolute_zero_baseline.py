@@ -505,6 +505,17 @@ def main():
     parser.add_argument("--name-suffix", type=str, default="", help="Suffix for WandB run name")
     args = parser.parse_args()
     
+    # Debug: Print parsed arguments
+    print(f"\nParsed arguments:")
+    print(f"  --iterations: {args.iterations}")
+    print(f"  --samples: {args.samples}")
+    print(f"  --solver-epochs: {args.solver_epochs}")
+    print(f"  --proposer-epochs: {args.proposer_epochs}")
+    print(f"  --batch-size: {args.batch_size}")
+    print(f"  --quick-test: {args.quick_test}")
+    print(f"  --name-suffix: '{args.name_suffix}'")
+    print()
+    
     # Configuration
     model_name = "Qwen/Qwen2-0.5B-Instruct"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -568,6 +579,11 @@ def main():
     print(f"Device: {device}")
     print(f"Total iterations: {total_iterations}")
     print(f"Samples per iteration: {samples_per_iteration}")
+    print(f"Solver epochs: {solver_epochs_per_iteration}")
+    print(f"Proposer epochs: {proposer_epochs_per_iteration}")
+    print(f"Batch size: {batch_size}")
+    if args.quick_test:
+        print("*** RUNNING IN QUICK TEST MODE ***")
     print("="*60 + "\\n")
     
     # Initialize trainer
@@ -682,12 +698,22 @@ def main():
             trainer.solver_model.save_pretrained(solver_model_path)
             trainer.tokenizer.save_pretrained(solver_model_path)
         
-        # Create custom GRPO trainer for solver
+        # Create test prompts for solver
+        solver_test_prompts = [
+            "Calculate: 5 + 3 = ",
+            "Calculate: 12 - 7 = ",
+            "Calculate: 8 * 4 = ",
+            "Calculate: 9 + 6 = ",
+            "Calculate: 15 - 8 = ",
+        ]
+        
+        # Create custom GRPO trainer for solver with epoch callback
         solver_trainer = GRPOTrainer(
             model=solver_model_path,
             args=solver_config,
             train_dataset=solver_dataset,
-            reward_funcs=[solver_reward_function]
+            reward_funcs=[solver_reward_function],
+            callbacks=[EpochSampleLogger('solver', iteration + 1, trainer.tokenizer, solver_test_prompts)]
         )
         
         # Train solver
@@ -702,11 +728,18 @@ def main():
         solver_metrics = evaluate_on_standard_dataset(trainer.solver_model, trainer.tokenizer, device)
         print(f"Solver accuracy: {solver_metrics['eval_accuracy']:.2%}")
         
+        # Log solver metrics
+        solver_accuracy = solver_metrics['eval_accuracy']
         wandb.log({
             "iteration": iteration + 1,
-            "solver/eval_accuracy": solver_metrics['eval_accuracy'],
+            "solver/eval_accuracy": solver_accuracy,
             "solver/eval_correct": solver_metrics['eval_correct'],
+            "solver/eval_total": solver_metrics['eval_total'],
         })
+        
+        # Initialize proposer metrics
+        proposer_mean_reward = 0.0
+        proposer_std_reward = 0.0
         
         # Train proposer (if we have enough data)
         if len(proposer_dataset) > 0:
@@ -776,12 +809,20 @@ def main():
                 trainer.proposer_model.save_pretrained(proposer_model_path)
                 trainer.tokenizer.save_pretrained(proposer_model_path)
             
-            # Create custom GRPO trainer for proposer
+            # Create test prompts for proposer
+            proposer_test_prompts = [
+                "Generate arithmetic: Calculate: 5 + 3 = \nGenerate arithmetic: Calculate: 12 - 7 = \nGenerate arithmetic: ",
+                "Problem: Calculate: 8 + 4 = \nProblem: Calculate: 15 - 6 = \nProblem: ",
+                "Create: Calculate: 3 * 4 = \nCreate: Calculate: 7 * 2 = \nCreate: ",
+            ]
+            
+            # Create custom GRPO trainer for proposer with epoch callback
             proposer_trainer = GRPOTrainer(
                 model=proposer_model_path,
                 args=proposer_config,
                 train_dataset=proposer_dataset,
-                reward_funcs=[proposer_reward_function]
+                reward_funcs=[proposer_reward_function],
+                callbacks=[EpochSampleLogger('proposer', iteration + 1, trainer.tokenizer, proposer_test_prompts)]
             )
             
             # Train proposer
@@ -789,23 +830,43 @@ def main():
             
             # Update proposer model
             trainer.proposer_model = proposer_trainer.model
+            
+            # Calculate and log proposer metrics
+            proposer_rewards = [r for r in proposer_dataset['learnability_reward']]
+            proposer_mean_reward = np.mean(proposer_rewards) if proposer_rewards else 0.0
+            proposer_std_reward = np.std(proposer_rewards) if proposer_rewards else 0.0
+            
+            wandb.log({
+                "proposer/reward_mean": proposer_mean_reward,
+                "proposer/reward_std": proposer_std_reward,
+                "proposer/num_problems": len(proposer_dataset),
+            })
         
-        # Log baseline statistics
+        # Log baseline statistics with proper prefixes
         baseline_stats = {}
         for key, values in trainer.baselines.baselines.items():
             if len(values) > 0:
-                baseline_stats[f"baseline/{key}_mean"] = np.mean(values)
-                baseline_stats[f"baseline/{key}_std"] = np.std(values)
+                # Extract role (proposer/solver) from key
+                role = key.split('_')[0]  # 'proposer_easy' -> 'proposer'
+                difficulty = '_'.join(key.split('_')[1:])  # 'proposer_easy' -> 'easy'
+                baseline_stats[f"{role}/baseline_{difficulty}_mean"] = np.mean(values)
+                baseline_stats[f"{role}/baseline_{difficulty}_std"] = np.std(values)
         
         wandb.log(baseline_stats)
         
         # Log tables for this iteration
+        # Note: wandb.Table doesn't have a .data attribute, so we just log them
         wandb.log({f"proposer_generations_iter_{iteration+1}": proposer_table})
         wandb.log({f"solver_results_iter_{iteration+1}": solver_table})
         
-        # Reset tables for next iteration
-        proposer_table = wandb.Table(columns=["iteration", "prompt_type", "raw_output", "parsed_problem", "parsed_success"])
-        solver_table = wandb.Table(columns=["iteration", "problem", "solver_answer", "correct_answer", "is_correct", "difficulty"])
+        # Create summary table for this iteration
+        iteration_summary = wandb.Table(columns=["metric", "value"])
+        iteration_summary.add_data("iteration", iteration + 1)
+        iteration_summary.add_data("solver_accuracy", solver_accuracy)
+        iteration_summary.add_data("proposer_reward_mean", proposer_mean_reward)
+        iteration_summary.add_data("problems_generated", len(raw_generations))
+        iteration_summary.add_data("problems_parsed", sum(1 for g in raw_generations if g['parsed']))
+        wandb.log({f"iteration_{iteration+1}_summary": iteration_summary})
         
         print(f"\\nIteration {iteration + 1} complete!")
         print(f"Solver accuracy: {solver_metrics['eval_accuracy']:.2%}")
