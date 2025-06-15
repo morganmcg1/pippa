@@ -56,14 +56,24 @@ class EpochSampleLogger(TrainerCallback):
         if model is None:
             return
             
-        # Create epoch table
-        epoch_table = wandb.Table(columns=[
-            "role", "iteration", "epoch", "prompt", "generation"
-        ])
+        # Create consistent table name
+        table_name = f"{self.role}_samples"
+        
+        # Create table with appropriate columns
+        if self.role == 'proposer':
+            epoch_table = wandb.Table(columns=[
+                "iteration", "epoch", "global_step", "prompt_template", 
+                "raw_generation", "parsed_problem", "is_valid"
+            ])
+        else:  # solver
+            epoch_table = wandb.Table(columns=[
+                "iteration", "epoch", "global_step", "problem", 
+                "generated_answer", "correct_answer", "is_correct"
+            ])
         
         model.eval()
         with torch.no_grad():
-            for i, prompt in enumerate(self.test_prompts[:3]):  # Log 3 samples
+            for i, prompt in enumerate(self.test_prompts[:5]):  # Log 5 samples
                 inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
                 outputs = model.generate(
                     **inputs,
@@ -75,16 +85,62 @@ class EpochSampleLogger(TrainerCallback):
                 generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
                 completion = generated[len(prompt):].strip()
                 
-                epoch_table.add_data(
-                    self.role,
-                    self.iteration,
-                    self.epoch_count,
-                    prompt[-50:] if self.role == 'proposer' else prompt,
-                    completion[:100]
-                )
+                if self.role == 'proposer':
+                    # Parse the generated problem
+                    match = re.search(r'Calculate:\s*(\d+)\s*([+\-*])\s*(\d+)\s*=', completion)
+                    if not match:
+                        match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)\s*=', completion)
+                    
+                    if match:
+                        parsed_problem = f"Calculate: {match.group(1)} {match.group(2)} {match.group(3)} = "
+                        is_valid = True
+                    else:
+                        parsed_problem = "PARSE_FAILED"
+                        is_valid = False
+                    
+                    epoch_table.add_data(
+                        self.iteration,
+                        self.epoch_count,
+                        state.global_step,
+                        prompt.split('\n')[-1][:50],  # Last line of prompt template
+                        completion[:100],
+                        parsed_problem,
+                        is_valid
+                    )
+                else:  # solver
+                    # Calculate correct answer
+                    problem_match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', prompt)
+                    if problem_match:
+                        a, op, b = problem_match.groups()
+                        a, b = int(a), int(b)
+                        if op == '+':
+                            correct = str(a + b)
+                        elif op == '-':
+                            correct = str(a - b)
+                        elif op == '*':
+                            correct = str(a * b)
+                        else:
+                            correct = "?"
+                    else:
+                        correct = "?"
+                    
+                    # Extract answer from generation
+                    answer_match = re.match(r'^-?\d+', completion)
+                    generated_answer = answer_match.group(0) if answer_match else completion.split()[0] if completion else ""
+                    is_correct = generated_answer == correct
+                    
+                    epoch_table.add_data(
+                        self.iteration,
+                        self.epoch_count,
+                        state.global_step,
+                        prompt,
+                        generated_answer,
+                        correct,
+                        is_correct
+                    )
         
-        # Log the table
-        wandb.log({f"{self.role}_epoch_{self.iteration}_{self.epoch_count}_samples": epoch_table})
+        # Log the table with consistent name
+        wandb.log({table_name: epoch_table})
         model.train()
 
 
