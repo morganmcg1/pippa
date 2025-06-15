@@ -1,0 +1,17 @@
+[project]
+name = "gr00t-rl"
+version = "0.1.0"
+description = "RL training for GR00T robotic foundation model"
+dependencies = [
+    "torch>=2.0.0",
+    "numpy>=1.24.0",
+    "gymnasium>=0.29.0",
+    "wandb>=0.16.0",
+    "python-dotenv>=1.0.0",
+    "cloudpickle>=3.0.0",
+    "tensorboard>=2.15.0",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
