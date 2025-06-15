@@ -20,6 +20,17 @@ This file contains important instructions and learnings for Claude when working 
   2. Run `uv pip sync` or `uv pip install -e .`
   3. Never use `uv pip install <package>` directly
 
+### Running Python Scripts with `uv`
+- **ALWAYS use `uv run`** to execute Python scripts
+- This ensures the correct virtual environment and dependencies are used
+- Example commands:
+  ```bash
+  uv run python train_script.py     # Run a Python script
+  uv run pytest tests/              # Run tests
+  uv run python -m module_name      # Run a module
+  ```
+- **NEVER use `python` directly** - always use `uv run python`
+
 ## Remote Machine Operations
 
 ### Use tmux Sessions
@@ -677,7 +688,7 @@ GR00T (Generalized Robotic Operation Optimization Technology) N1.5 is NVIDIA's f
 
 2. **Run Training**:
    ```bash
-   python train_gr00t_overfit_demo.py
+   uv run python train_gr00t_overfit_demo.py
    ```
 
 3. **Monitor on WandB**:

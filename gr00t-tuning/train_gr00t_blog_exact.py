@@ -75,9 +75,9 @@ if not modality_file.exists():
 output_dir = Path("./so101-checkpoints")
 output_dir.mkdir(exist_ok=True)
 
-# Prepare the EXACT command from the blog post
+# Prepare the EXACT command from the blog post (using uv run)
 cmd = [
-    "python", str(isaac_gr00t_path / "scripts" / "gr00t_finetune.py"),
+    "uv", "run", "python", str(isaac_gr00t_path / "scripts" / "gr00t_finetune.py"),
     "--dataset-path", "./demo_data/so101-table-cleanup/",
     "--num-gpus", "1",
     "--output-dir", "./so101-checkpoints",

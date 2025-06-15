@@ -54,7 +54,7 @@ output_dir.mkdir(exist_ok=True)
 # Prepare training command for extended overfitting
 # Using very aggressive settings for complete overfitting
 cmd = [
-    "python", str(isaac_gr00t_path / "scripts" / "gr00t_finetune.py"),
+    "uv", "run", "python", str(isaac_gr00t_path / "scripts" / "gr00t_finetune.py"),
     "--dataset-path", str(demo_data_path),
     "--output-dir", str(output_dir),
     "--data-config", "fourier_gr1_arms_only",  # Using single camera config for demo data
