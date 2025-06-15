@@ -20,7 +20,7 @@ load_dotenv()
 
 # Set up offscreen rendering for headless environments
 import os
-os.environ['MUJOCO_GL'] = 'egl'  # Use EGL for headless rendering
+os.environ['MUJOCO_GL'] = 'osmesa'  # Use OSMesa for software rendering on headless servers
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
