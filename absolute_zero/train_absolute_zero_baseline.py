@@ -12,7 +12,7 @@ Key components:
 
 import torch
 from datasets import Dataset, load_dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainerCallback
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainerCallback, TrainerState, TrainerControl
 from trl import GRPOConfig, GRPOTrainer
 import random
 import numpy as np
@@ -37,6 +37,55 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
+
+
+class EpochSampleLogger(TrainerCallback):
+    """Callback to log sample generations at the end of each epoch."""
+    
+    def __init__(self, role: str, iteration: int, tokenizer, test_prompts: List[str]):
+        self.role = role
+        self.iteration = iteration
+        self.tokenizer = tokenizer
+        self.test_prompts = test_prompts
+        self.epoch_count = 0
+        
+    def on_epoch_end(self, args: Any, state: TrainerState, control: TrainerControl, **kwargs):
+        """Log samples at the end of each epoch."""
+        self.epoch_count += 1
+        model = kwargs.get('model')
+        if model is None:
+            return
+            
+        # Create epoch table
+        epoch_table = wandb.Table(columns=[
+            "role", "iteration", "epoch", "prompt", "generation"
+        ])
+        
+        model.eval()
+        with torch.no_grad():
+            for i, prompt in enumerate(self.test_prompts[:3]):  # Log 3 samples
+                inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=32 if self.role == 'proposer' else 16,
+                    temperature=1.0 if self.role == 'proposer' else 0.7,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id
+                )
+                generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                completion = generated[len(prompt):].strip()
+                
+                epoch_table.add_data(
+                    self.role,
+                    self.iteration,
+                    self.epoch_count,
+                    prompt[-50:] if self.role == 'proposer' else prompt,
+                    completion[:100]
+                )
+        
+        # Log the table
+        wandb.log({f"{self.role}_epoch_{self.iteration}_{self.epoch_count}_samples": epoch_table})
+        model.train()
 
 
 class TRRPlusBaselines:
