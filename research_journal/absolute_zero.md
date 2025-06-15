@@ -429,31 +429,44 @@ Our implementation was fundamentally wrong! The paper uses:
 - Model naturally gravitates toward tasks it can handle (deduction)
 - Need more iterations to see if harder tasks improve
 
-### Maximum GPU Utilization Run - 2025-06-15_22:36 - Run ID: meptbn6r
+### Maximum GPU Utilization Experiments - 2025-06-15_22:36
+
+#### Run 1: Initial Max GPU - Run ID: meptbn6r
+**Status**: KILLED (only used 50% GPU memory)
+**Configuration**:
+- Batch size: 192, num_generations: 16
+- Found: Only using ~40GB of 80GB available
+
+#### Run 2: Enhanced Max GPU v2 - Run ID: yy33325l
 **Status**: RUNNING 🔄
 **Configuration**:
-- Batch size: 192 (maximum for H100)
-- Iterations: 100
-- Seed buffer size: 128
-- Gradient accumulation: 1
-- num_generations: 16
-- WandB: https://wandb.ai/wild-ai/pippa/runs/meptbn6r
+- Batch size: 384 (64 samples per task-role)
+- num_generations: 32
+- Seed buffer size: 256
+- WandB: https://wandb.ai/wild-ai/pippa/runs/yy33325l
 
-**Implementation Enhancements**:
-- Added gradient accumulation support to train_absolute_zero_unified.py
-- Proper batch size calculation with gradient accumulation
-- Maximum GPU memory utilization (~73GB expected)
+**Early Observations** (Step 4):
+- Loss: 0.0007 (excellent)
+- Reward: -0.957 (typical for early training)
+- Monitoring GPU memory usage...
 
-**Early Observations** (Step 5/many):
-- Training successfully started with maximum batch size
-- Loss: 0.0017 (very low, good sign)
-- Reward: -0.899 (typical for early training)
-- Memory usage monitoring in progress
+#### Run 3: Ultra Max GPU v3 - Run ID: (pending)
+**Status**: LAUNCHING
+**Configuration**:
+- Batch size: 512 (85 samples per task-role)
+- num_generations: 64 (extreme parallelism)
+- Seed buffer size: 512
+- Target: 90-95% GPU memory usage
 
-This run will demonstrate:
-1. Whether curriculum learning emerges at scale
-2. If harder tasks (abduction/induction) improve with more iterations
-3. Maximum training throughput on H100
+**Key Implementation Updates**:
+- Enhanced num_generations scaling: up to 64 for large batches
+- Removed gradient accumulation (not needed for memory saving)
+- Dynamic scaling: `num_generations = 4/8/16/32/64` based on batch size
+
+These runs will demonstrate:
+1. Maximum possible throughput on H100
+2. Whether extreme parallelism helps curriculum learning
+3. Optimal batch size vs num_generations tradeoffs
 
 ## References
 - [Absolute Zero Paper](https://arxiv.org/pdf/2505.03335v2)
