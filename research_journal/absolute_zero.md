@@ -272,6 +272,135 @@ Examples of broken output:
 5. **Self-play may hurt initial performance** - Solver accuracy much lower than supervised baseline (18% vs 75%)
 6. **Curriculum learning is slow** - No improvement in first 2 iterations
 
+## Training Loop Deep Dive - 2025-06-15_21:40
+
+### Understanding the Absolute Zero Training Loop
+
+After implementing table logging fixes, I analyzed why proposer and solver tables are logged at different global steps. Here's the detailed walkthrough:
+
+#### Overview of One Iteration
+1. **Problem Generation**: Proposer generates 100 problems (2x oversampling)
+2. **Solver Training**: Train on 50 valid problems for 2 epochs
+3. **Proposer Training**: Train on ~40 high-reward problems for 2 epochs
+
+#### Detailed Step-by-Step Process
+
+**Phase 1: Problem Generation**
+- Proposer generates problems using current policy
+- Problems are parsed and validated (typically ~50% success rate)
+- Solver attempts all valid problems
+- Learnability rewards computed: which problems helped solver improve?
+
+**Phase 2: Solver Training (Global Steps 1-50)**
+```python
+solver_config = GRPOConfig(
+    num_train_epochs=2,
+    per_device_train_batch_size=8,
+    logging_steps=1,  # Log every step
+    num_generations=4,  # GRPO: 4 completions per prompt
+)
+```
+- Dataset: 50 arithmetic problems with Python-computed answers
+- Steps per epoch: 50 samples ÷ 8 batch_size = ~6-7 steps/epoch
+- With GRPO's multiple generations: 50 ÷ (8÷4) = 25 steps/epoch
+- **Epoch 1 ends at step 25**: `solver_samples` table logged
+- **Epoch 2 ends at step 50**: Another `solver_samples` table logged
+
+**Phase 3: Proposer Training (Global Steps 51-130)**
+```python
+proposer_config = GRPOConfig(
+    num_train_epochs=2,
+    per_device_train_batch_size=min(8, len(proposer_dataset)),
+    logging_steps=1,
+    num_generations=4,
+)
+```
+- Dataset: Only problems with positive learnability reward (~40 problems)
+- Steps per epoch: 40 samples ÷ 8 batch_size × 4 generations = 40 steps/epoch
+- **Epoch 1 ends at step ~90**: `proposer_samples` table logged
+- **Epoch 2 ends at step ~130**: Another `proposer_samples` table logged
+
+#### Why Different Step Numbers for Tables?
+
+1. **Sequential Training**: Proposer starts after solver completes (step 51+)
+2. **Different Dataset Sizes**: 
+   - Solver: Always 50 problems
+   - Proposer: Variable (~40), only high-reward problems
+3. **Epoch-Based Logging**: Tables log at epoch boundaries via `EpochSampleLogger`
+4. **Global Step Counter**: Continuous across both models for alignment
+
+#### Key Implementation Details
+
+**Table Naming Fix (2025-06-15_21:35)**
+- Changed from: `solver_epoch_1_1_samples`, `proposer_epoch_1_1_samples`
+- Changed to: `solver_samples`, `proposer_samples`
+- Epoch/iteration/global_step now logged as columns, not in table name
+
+**Logging Frequency**
+- Set `logging_steps=1` for both models
+- Ensures metrics logged at every training step
+- Critical for monitoring reward signals and convergence
+
+**Callback Design**
+```python
+class EpochSampleLogger(TrainerCallback):
+    def on_epoch_end(self, args, state, control, **kwargs):
+        # Log samples with consistent table name
+        table_name = f"{self.role}_samples"  # 'solver_samples' or 'proposer_samples'
+        # Include iteration, epoch, global_step as columns
+```
+
+### Current Training Status (Run: 69l0wk9v)
+- Tables logging correctly with new naming scheme
+- Frequent metric logging enabled (every step)
+- Solver accuracy: 29.5% (iteration 1)
+- Still below GRPO baseline (75%) but improving from 18%
+
+## Major Algorithm Correction - 2025-06-15_22:00
+
+### Critical Misunderstanding Discovered
+Our implementation was fundamentally wrong! The paper uses:
+1. **Single unified model** serving both proposer and solver roles
+2. **Joint training** with one RL update per iteration
+3. **Seeding phase** before training begins (no gradients)
+4. **Three task types** that must all be generated and solved
+
+### Correct Algorithm (Per Paper)
+```
+1. Seeding Phase (no gradients):
+   - Populate task buffers with initial examples
+   - Deduction: "Calculate: 5 + 3 = ?"
+   - Abduction: "Find: ? + ? = 8"
+   - Induction: "Pattern: (2,3)→5, (4,1)→5, ..."
+
+2. For each training iteration:
+   a) Propose Phase: Model generates new tasks (all 3 types)
+   b) Solve Phase: Same model attempts tasks
+   c) Single RL Update: Combined gradients from both roles
+```
+
+### Implementation Changes (train_absolute_zero_unified.py)
+1. **Single Model Instance**: Removed separate proposer/solver models
+2. **Three Task Types for Arithmetic**:
+   - **Deduction**: Given expression, predict result (standard arithmetic)
+   - **Abduction**: Given result and operation, find valid inputs
+   - **Induction**: Given examples, infer the pattern/rule
+3. **Unified Training Loop**: 
+   - Generate tasks → Solve tasks → Single GRPO update
+   - All within one iteration, not sequential
+4. **Task Buffers**: Maintain separate buffers for each task type
+5. **TRR++ Baselines**: 6 baselines (3 tasks × 2 roles)
+
+### Key Insights
+- The model learns both skills simultaneously
+- Proposer learns what problems help solver improve
+- Solver learns to solve increasingly difficult problems
+- Natural curriculum emerges from this interaction
+
+### Files Created
+- `train_absolute_zero_unified.py` - Correct implementation
+- `launch_unified.sh` - Launch script
+
 ## References
 - [Absolute Zero Paper](https://arxiv.org/pdf/2505.03335v2)
 - [GRPO Baseline Results](./GRPO_baseline.md)
