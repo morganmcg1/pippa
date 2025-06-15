@@ -411,52 +411,88 @@ def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: Un
             # Create table with consistent name
             table_name = f"{self.role}_samples"
             table = wandb.Table(columns=[
-                "iteration", "epoch", "global_step", "task_type", 
-                "prompt", "generation", "parsed_task", "is_valid"
+                "iteration", "epoch", "global_step", "task_type", "role",
+                "prompt", "generation", "result", "is_valid_proposal"
             ])
             
             model.eval()
             with torch.no_grad():
-                # Log samples for each task type
+                # Log 3 samples for each task type and role
                 for task_type in ['deduction', 'abduction', 'induction']:
-                    # Get buffer samples for few-shot prompt
+                    # Get appropriate buffer
                     if task_type == 'deduction':
-                        buffer_samples = self.trainer.deduction_buffer.sample(4)
+                        buffer = self.trainer.deduction_buffer
+                        few_shot_size = 4
                     elif task_type == 'abduction':
-                        buffer_samples = self.trainer.abduction_buffer.sample(4)
+                        buffer = self.trainer.abduction_buffer
+                        few_shot_size = 4
                     else:
-                        buffer_samples = self.trainer.induction_buffer.sample(2)
+                        buffer = self.trainer.induction_buffer
+                        few_shot_size = 2
                     
-                    if not buffer_samples:
+                    if len(buffer) < few_shot_size:
                         continue
                     
-                    # Generate sample
-                    prompt = self.trainer.create_proposer_prompt(task_type, buffer_samples)
-                    inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
-                    outputs = model.generate(
-                        **inputs,
-                        max_new_tokens=64,
-                        temperature=1.0,
-                        do_sample=True,
-                        pad_token_id=self.tokenizer.pad_token_id
-                    )
-                    generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-                    completion = generated[len(prompt):].strip()
+                    # Generate 3 proposer samples
+                    for _ in range(3):
+                        buffer_samples = buffer.sample(few_shot_size)
+                        prompt = self.trainer.create_proposer_prompt(task_type, buffer_samples)
+                        inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
+                        outputs = model.generate(
+                            **inputs,
+                            max_new_tokens=64,
+                            temperature=1.0,
+                            do_sample=True,
+                            pad_token_id=self.tokenizer.pad_token_id
+                        )
+                        generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                        completion = generated[len(prompt):].strip()
+                        
+                        # Parse and validate
+                        parsed_task = self.trainer.parse_proposer_generation(completion, task_type)
+                        is_valid = parsed_task is not None
+                        
+                        table.add_data(
+                            self.iteration,
+                            self.epoch_count,
+                            state.global_step,
+                            task_type,
+                            "proposer",
+                            prompt[-100:],  # Last 100 chars
+                            completion[:100],  # First 100 chars
+                            str(parsed_task)[:100] if parsed_task else "PARSE_FAILED",
+                            is_valid
+                        )
                     
-                    # Parse and validate
-                    parsed_task = self.trainer.parse_proposer_generation(completion, task_type)
-                    is_valid = parsed_task is not None
-                    
-                    table.add_data(
-                        self.iteration,
-                        self.epoch_count,
-                        state.global_step,
-                        task_type,
-                        prompt[-100:],  # Last 100 chars
-                        completion[:100],  # First 100 chars
-                        str(parsed_task)[:100] if parsed_task else "PARSE_FAILED",
-                        is_valid
-                    )
+                    # Generate 3 solver samples
+                    tasks = buffer.sample(3)
+                    for task in tasks:
+                        prompt = self.trainer.create_solver_prompt(task, task_type)
+                        inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
+                        outputs = model.generate(
+                            **inputs,
+                            max_new_tokens=32,
+                            temperature=0.7,
+                            do_sample=True,
+                            pad_token_id=self.tokenizer.pad_token_id
+                        )
+                        generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                        completion = generated[len(prompt):].strip()
+                        
+                        # Evaluate solver response
+                        reward = self.trainer.evaluate_solver_response(completion, task, task_type)
+                        
+                        table.add_data(
+                            self.iteration,
+                            self.epoch_count,
+                            state.global_step,
+                            task_type,
+                            "solver",
+                            prompt[-100:],  # Last 100 chars
+                            completion[:50],  # First 50 chars
+                            f"correct" if reward > 0 else "incorrect",
+                            True  # N/A for solver - always valid attempt
+                        )
             
             # Log the table with global step
             wandb.log({table_name: table}, step=state.global_step)
