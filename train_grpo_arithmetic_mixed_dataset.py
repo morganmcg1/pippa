@@ -226,10 +226,12 @@ def main():
     dataset = dataset.map(prepare_dataset)
     
     # Create reward function wrapper
-    def reward_wrapper(samples, prompts, **kwargs):
+    def reward_wrapper(completions, prompts=None, **kwargs):
+        if prompts is None:
+            prompts = kwargs.get('prompt', [])
         answers = [dataset[i]["answer"] for i in range(len(prompts))]
         task_types = [dataset[i]["task_type"] for i in range(len(prompts))]
-        return reward_function(samples, prompts, answers, task_types, **kwargs)
+        return reward_function(completions, prompts, answers, task_types, **kwargs)
     
     # GRPO configuration
     config = GRPOConfig(
