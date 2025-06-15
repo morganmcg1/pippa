@@ -765,15 +765,33 @@ A high training reward with low final accuracy indicates overfitting. For exampl
 - Fixed test set for all experiments
 - Base model baseline: ~30% accuracy
 
-### Required Template: train_grpo_with_standard_eval.py
+### Required Templates
 
-All new GRPO experiments MUST use this template which:
-1. Trains on your chosen dataset
-2. Evaluates on the standardized `morgan/arithmetic_eval` dataset
-3. Reports `arithmetic_eval` as the primary metric in WandB
-4. Enables fair comparison across all experiments
+**Basic Template**: `train_grpo_with_standard_eval.py`
+- Trains on your chosen dataset
+- Evaluates on standardized dataset at the end
+- Reports `arithmetic_eval` as the primary metric
+
+**Periodic Evaluation Template**: `train_grpo_with_periodic_eval.py` 
+- Evaluates on standardized dataset every N epochs
+- Tracks generalization throughout training
+- Identifies optimal checkpoint (may not be final)
+- Saves more checkpoints for flexibility
 
 **Key change**: The metric name in WandB is now `arithmetic_eval` (not `final_accuracy`)
+
+### Why Periodic Evaluation Matters
+
+**Discovery**: Models often severely overfit
+- Mixed Dataset: 88.3% training reward → 24% standardized eval (worse than 38% baseline!)
+- Shows importance of tracking generalization during training
+- Best checkpoint likely occurs before final epoch
+
+**Implementation**: Use `PeriodicEvalCallback` to:
+- Evaluate every 5 epochs by default
+- Log metrics with epoch prefix
+- Track `periodic_eval/current_accuracy`
+- Find `best_epoch/accuracy` and `best_epoch/epoch`
 
 ### Re-evaluating Previous Models
 

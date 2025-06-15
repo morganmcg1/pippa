@@ -360,7 +360,7 @@ def train(args):
         
         # Log all metrics to WandB in a single call
         if args.track and WANDB_AVAILABLE:
-            wandb.log(metrics)
+            wandb.log(metrics, step=global_step)
         
         # Check for videos and upload them
         if args.track and WANDB_AVAILABLE and args.capture_video:
