@@ -271,9 +271,12 @@ def make_vec_env(
             env = gym.make(env_id, **env_kwargs)
             
             # Seed the environment
-            env.reset(seed=seed + rank)
-            env.action_space.seed(seed + rank)
-            env.observation_space.seed(seed + rank)
+            if seed is not None:
+                env.reset(seed=seed + rank)
+                env.action_space.seed(seed + rank)
+                env.observation_space.seed(seed + rank)
+            else:
+                env.reset()
             
             # Apply wrapper if specified
             if wrapper_class is not None:

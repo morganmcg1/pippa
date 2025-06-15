@@ -124,7 +124,9 @@ class PPOGr00tActorCriticV2(nn.Module):
                     obs_list.append(obs[key].flatten(start_dim=1))
             return torch.cat(obs_list, dim=-1)
         else:
-            return obs.flatten(start_dim=1)
+            # For single tensor observations, just return as-is
+            # The networks expect the original shape, not flattened
+            return obs
     
     def get_value(self, obs: Union[torch.Tensor, Dict[str, torch.Tensor]]) -> torch.Tensor:
         """Get value estimate."""

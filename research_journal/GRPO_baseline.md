@@ -679,6 +679,64 @@ config = GRPOConfig(
 
 This experiment would definitively test whether generation diversity is a bottleneck for further improvements.
 
+## Ultra-High Diversity Experiment - Running (2025-06-15)
+
+### Experiment Launched: 64 Generations Per Prompt
+
+**Run ID**: icel5tvz  
+**Script**: `train_grpo_arithmetic_ultra_diversity_v2.py`  
+**WandB**: https://wandb.ai/wild-ai/pippa/runs/icel5tvz  
+**Configuration**:
+- Batch size: 960 (64 generations × 15 prompts)
+- Num generations: 64 (4x the successful 16-generation baseline)
+- Mixed dataset: 50% arithmetic, 25% counting, 25% comparison
+- Based on the 54.7% accuracy script structure
+
+**Current Status** (as of launch):
+- Successfully running on H100 GPU
+- Epoch 6.0: Training reward 0.273 (27.3%)
+- Steady improvement from initial -1.0
+- GPU memory usage healthy
+- Expected to be ~4x slower per epoch but should achieve superior accuracy
+
+**Hypothesis**: With 4x more generation diversity, we expect to break the 60% final accuracy barrier by providing much more reliable reward statistics for GRPO's advantage calculation.
+
+## Next Parallel Experiments - Designed (2025-06-15)
+
+Based on the 54.7% breakthrough with mixed datasets and full diversity, here are 2 complementary experiments to run in parallel:
+
+### 1. Mixed Dataset + Small Numbers (0-10 range)
+**Hypothesis**: Combining the best of both successful approaches
+- The mixed dataset achieved 54.7% final accuracy (best generalization)
+- The small numbers (0-10) achieved 85.9% training reward (easiest to learn)
+- Combining both should achieve >60% final accuracy
+
+**Configuration**:
+- Dataset: 50% arithmetic (0-10 only), 25% counting (0-10), 25% comparison (0-10)
+- All other parameters same as 54.7% success:
+  - Batch size: 240, num_generations: 16
+  - Learning rate: 5e-6, beta: 0.1, temperature: 0.7
+  - Epochs: 100 (extended training)
+- **Script**: `train_grpo_mixed_small_numbers.py`
+
+### 2. Extended Training from 54.7% Checkpoint
+**Hypothesis**: The 54.7% model hasn't plateaued yet
+- Original run only trained for 50 epochs
+- Training reward was still improving
+- Extended training could reach 65-70% accuracy
+
+**Configuration**:
+- Load checkpoint from run `afj0flv3` (the 54.7% model)
+- Continue training for 100 more epochs
+- Keep exact same configuration
+- Monitor for overfitting with eval checks every 25 epochs
+- **Script**: `train_grpo_extended_from_checkpoint.py`
+
+### Why These Experiments?
+1. **Mixed + Small Numbers**: Combines two winning strategies - should be easier to learn AND generalize well
+2. **Extended Training**: The simplest path to improvement - just train the best model longer
+3. Both are low-risk, high-reward experiments that build directly on proven success
+
 ## TRL GRPO log_completions Debugging (2025-06-15)
 **Issue**: AttributeError: 'Table' object has no attribute 'add_section' when log_completions=True
 
