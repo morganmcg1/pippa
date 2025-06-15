@@ -16,7 +16,7 @@ import cloudpickle
 def worker(
     remote: Connection,
     parent_remote: Connection,
-    env_fn_wrapper: cloudpickle.CloudPickledData
+    env_fn_wrapper: 'CloudPickledData'
 ):
     """Worker process for parallel environment execution."""
     parent_remote.close()
