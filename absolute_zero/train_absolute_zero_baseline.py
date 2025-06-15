@@ -305,13 +305,13 @@ class AbsoluteZeroTrainer:
         
         return results
     
-    def compute_learnability_reward(self, results: List[Dict[str, Any]]) -> float:
+    def compute_learnability_rewards(self, results: List[Dict[str, Any]]) -> List[float]:
         """
-        Compute learnability reward for proposer based on solver performance.
-        Reward is based on whether the problems helped the solver improve.
+        Compute per-problem learnability rewards for proposer based on solver performance.
+        Returns a list of rewards, one for each problem.
         """
         if not results:
-            return 0.0
+            return []
         
         # Current solver accuracy on proposed problems
         current_accuracy = sum(r['is_correct'] for r in results) / len(results)
@@ -325,38 +325,45 @@ class AbsoluteZeroTrainer:
         else:
             improvement = current_accuracy - 0.25  # Assume 25% baseline
         
-        # Learnability reward components
-        # 1. Improvement bonus
-        improvement_reward = improvement * 2.0
+        # Base improvement reward (applies to all problems)
+        base_improvement_reward = improvement * 2.0
         
-        # 2. Optimal difficulty bonus (problems should be neither too easy nor too hard)
-        difficulty_distribution = {'easy': 0, 'medium': 0, 'hard': 0}
-        for r in results:
-            difficulty_distribution[r['difficulty']] += 1
+        # Compute per-problem rewards
+        rewards = []
+        for result in results:
+            # Start with base reward
+            reward = base_improvement_reward
+            
+            # 1. Correctness bonus - reward problems the solver got right
+            if result['is_correct']:
+                reward += 0.5
+            else:
+                reward -= 0.2
+            
+            # 2. Difficulty-appropriate bonus
+            difficulty = result['difficulty']
+            if difficulty == 'medium':
+                reward += 0.3  # Medium problems are ideal
+            elif difficulty == 'easy':
+                reward += 0.1  # Easy problems are okay
+            else:  # hard
+                reward += 0.2  # Hard problems are good if solver can handle them
+            
+            # 3. Source bonus - only reward proposer-generated problems
+            if result['source'] == 'proposer':
+                reward += 0.2
+            else:
+                reward = 0.0  # Seed problems get no reward for proposer
+            
+            rewards.append(reward)
         
-        total = len(results)
-        optimal_distribution = {'easy': 0.3, 'medium': 0.5, 'hard': 0.2}
+        # Log aggregate statistics
+        proposer_rewards = [r for r, res in zip(rewards, results) if res['source'] == 'proposer']
+        if proposer_rewards:
+            print(f"[PROPOSER] Average reward: {np.mean(proposer_rewards):.3f}")
+            print(f"[PROPOSER] Reward range: [{min(proposer_rewards):.3f}, {max(proposer_rewards):.3f}]")
         
-        difficulty_penalty = 0
-        for diff in ['easy', 'medium', 'hard']:
-            actual_ratio = difficulty_distribution[diff] / total
-            expected_ratio = optimal_distribution[diff]
-            difficulty_penalty += abs(actual_ratio - expected_ratio)
-        
-        difficulty_reward = 1.0 - difficulty_penalty
-        
-        # 3. Diversity bonus (reward variety in problems)
-        unique_patterns = len(set(r['prompt'].split()[2] for r in results if len(r['prompt'].split()) > 2))
-        diversity_reward = min(unique_patterns / 3.0, 1.0)  # Reward for using different operations
-        
-        # Combined learnability reward
-        learnability_reward = (
-            0.5 * improvement_reward +
-            0.3 * difficulty_reward +
-            0.2 * diversity_reward
-        )
-        
-        return learnability_reward
+        return rewards
     
     def create_training_datasets(self, num_samples: int) -> Tuple[Dataset, Dataset, List[Dict], List[Dict]]:
         """Create training datasets for both proposer and solver."""
@@ -381,9 +388,9 @@ class AbsoluteZeroTrainer:
         print("Solving generated problems...")
         results = self.solve_problems(all_problems)
         
-        # Compute learnability reward for proposer
-        learnability_reward = self.compute_learnability_reward(results)
-        print(f"Learnability reward: {learnability_reward:.3f}")
+        # Compute per-problem learnability rewards for proposer
+        learnability_rewards = self.compute_learnability_rewards(results)
+        print(f"Computed {len(learnability_rewards)} learnability rewards")
         
         # Create solver dataset
         solver_data = {
@@ -394,16 +401,51 @@ class AbsoluteZeroTrainer:
         solver_dataset = Dataset.from_dict(solver_data)
         
         # Create proposer dataset (problems that resulted in good learning)
-        # For now, we'll use a simple approach: reward proposer for all generated problems
-        # weighted by learnability
-        proposer_prompts = [
-            f"Generate an arithmetic problem that helps learning: Calculate: {r['prompt'].split('Calculate: ')[1]}"
-            for r in results if r['source'] == 'proposer'
+        # The proposer should learn to generate problems, not complete them
+        # We need to train it on the generation prompts, not the problems themselves
+        proposer_prompts = []
+        proposer_completions = []
+        
+        # Use the same prompts we used for generation
+        generation_prompts = [
+            "Generate a simple arithmetic problem in the format 'Calculate: X + Y = ': ",
+            "Create a math problem with addition or subtraction in the format 'Calculate: X - Y = ': ",
+            "Write an arithmetic problem with multiplication in the format 'Calculate: X * Y = ': ",
+            "Create a challenging arithmetic problem in the format 'Calculate: X op Y = ' where op is +, -, or *: ",
+            "Calculate: ",
         ]
         
+        # Create training data where the proposer learns to complete prompts with good problems
+        proposer_rewards_list = []
+        for i, r in enumerate(results):
+            if r['source'] == 'proposer':  # Train on all proposer problems, not just correct ones
+                # Create multiple training examples with different prompts
+                prompt = random.choice(generation_prompts)
+                completion = r['prompt']  # The actual problem like "Calculate: 5 + 3 = "
+                
+                proposer_prompts.append(prompt)
+                proposer_completions.append(completion)
+                proposer_rewards_list.append(learnability_rewards[i])
+        
+        # If no valid proposer problems, create some training data from seed problems
+        if len(proposer_prompts) == 0:
+            print("[WARNING] No valid proposer problems found, using seed problems for training")
+            for i, r in enumerate(results[:10]):  # Use first 10 results
+                if r['source'] == 'seed':
+                    prompt = random.choice(generation_prompts)
+                    completion = r['prompt']
+                    proposer_prompts.append(prompt)
+                    proposer_completions.append(completion)
+                    # Give seed problems a small positive reward to bootstrap learning
+                    proposer_rewards_list.append(0.1)
+        
+        # Create dataset with proper format for GRPO
+        # The 'prompt' field should contain the full text (prompt + completion)
+        # for the model to learn the generation pattern
         proposer_data = {
             'prompt': proposer_prompts,
-            'learnability_reward': [learnability_reward] * len(proposer_prompts)
+            'completion': proposer_completions,  # Store completions separately
+            'learnability_reward': proposer_rewards_list  # Use individual rewards
         }
         proposer_dataset = Dataset.from_dict(proposer_data)
         
@@ -600,15 +642,28 @@ def main():
             # Define proposer reward function based on learnability
             def proposer_reward_function(completions: List[str], prompts: List[str] = None, **kwargs) -> List[float]:
                 # For proposer, the reward is based on learnability
-                # This is simplified - in practice, we'd track which problems helped solver improve
                 rewards = []
                 batch_indices = kwargs.get('batch_indices', [])
                 
-                for i in range(len(completions)):
-                    if batch_indices:
+                if prompts is None:
+                    prompts = kwargs.get('prompt', [])
+                
+                for i, (completion, prompt) in enumerate(zip(completions, prompts)):
+                    if batch_indices and i < len(batch_indices):
+                        # Get the pre-computed reward from the dataset
                         reward = proposer_dataset[batch_indices[i]]['learnability_reward']
                     else:
-                        reward = 0.0  # Default reward
+                        # Default reward for generation - check if it's a valid problem
+                        # Extract the generated problem
+                        generated = completion.strip()
+                        
+                        # Check if it's a valid arithmetic problem
+                        import re
+                        match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', generated)
+                        if match:
+                            reward = 0.1  # Small positive reward for valid format
+                        else:
+                            reward = -0.5  # Negative reward for invalid format
                     
                     rewards.append(reward)
                     

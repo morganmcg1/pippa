@@ -190,8 +190,8 @@ def setup_wandb(config: ArgsConfig):
     })
 
 
-def save_checkpoint_to_wandb(checkpoint_dir: str, step: int):
-    """Save model checkpoint to WandB."""
+def save_checkpoint_to_wandb(checkpoint_dir: str, step: int, model=None, config=None):
+    """Save model checkpoint to WandB with specific model components."""
     checkpoint_path = Path(checkpoint_dir)
     if checkpoint_path.exists():
         # Create artifact for the checkpoint
@@ -204,9 +204,35 @@ def save_checkpoint_to_wandb(checkpoint_dir: str, step: int):
         # Add all files in the checkpoint directory
         artifact.add_dir(str(checkpoint_path))
         
+        # If we have the model, save specific components
+        if model is not None:
+            # Save the policy weights
+            policy_path = checkpoint_path / "gr00t_policy.pt"
+            torch.save(model.state_dict(), policy_path)
+            artifact.add_file(str(policy_path))
+            
+            # Save the projector weights specifically
+            projector_path = checkpoint_path / "projector_new_embodiment.pt"
+            projector_state = {}
+            for name, param in model.named_parameters():
+                if "projector" in name and param.requires_grad:
+                    projector_state[name] = param
+            if projector_state:
+                torch.save(projector_state, projector_path)
+                artifact.add_file(str(projector_path))
+            
+            # Copy modality.json if available
+            if config and hasattr(config, 'dataset_path'):
+                modality_src = Path(config.dataset_path[0]) / "meta" / "modality.json"
+                if modality_src.exists():
+                    modality_dst = checkpoint_path / "modality.json"
+                    import shutil
+                    shutil.copy2(modality_src, modality_dst)
+                    artifact.add_file(str(modality_dst))
+        
         # Log the artifact
         wandb.log_artifact(artifact)
-        print(f"Saved checkpoint at step {step} to WandB")
+        print(f"Saved checkpoint at step {step} to WandB with policy, projector, and modality.json")
 
 
 def main(config: ArgsConfig):
@@ -359,7 +385,7 @@ def main(config: ArgsConfig):
             def on_save(self, args, state, control, **kwargs):
                 if state.global_step % config.save_steps == 0:
                     checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{state.global_step}")
-                    save_checkpoint_to_wandb(checkpoint_dir, state.global_step)
+                    save_checkpoint_to_wandb(checkpoint_dir, state.global_step, model, config)
         
         # Note: The actual callback integration depends on the TrainRunner implementation
         # This is a placeholder for the callback pattern
@@ -373,7 +399,15 @@ def main(config: ArgsConfig):
         print("\nSaving final model to WandB...")
         final_checkpoint_dir = os.path.join(config.output_dir, f"checkpoint-{config.max_steps}")
         if os.path.exists(final_checkpoint_dir):
-            save_checkpoint_to_wandb(final_checkpoint_dir, config.max_steps)
+            save_checkpoint_to_wandb(final_checkpoint_dir, config.max_steps, model, config)
+        else:
+            # If exact step checkpoint doesn't exist, use the latest one
+            import glob
+            checkpoints = glob.glob(os.path.join(config.output_dir, "checkpoint-*"))
+            if checkpoints:
+                latest_checkpoint = max(checkpoints, key=lambda x: int(x.split('-')[-1]))
+                step = int(latest_checkpoint.split('-')[-1])
+                save_checkpoint_to_wandb(latest_checkpoint, step, model, config)
         
         # Also save the entire output directory as an artifact
         final_artifact = wandb.Artifact(
