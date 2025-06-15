@@ -213,7 +213,7 @@ def train(args):
             buffer.compute_returns_and_advantages(next_value, next_done)
         
         # Get data from buffer (without batch_size to get all data at once)
-        rollout_data = buffer.get(batch_size=None)
+        rollout_data = buffer.get()
         
         # Extract individual components
         b_obs = rollout_data['observations']
