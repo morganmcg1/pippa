@@ -49,7 +49,7 @@ def test_pendulum_with_logging(num_steps=1000):
             "num_envs": 4,
             "device": "cuda" if torch.cuda.is_available() else "cpu"
         },
-        tags=["test", "ppo", "pendulum", "gr00t-rl"]
+        tags=["test", "ppo", "pendulum", "gr00t-rl", "gr00t-ppo-testing"]
     )
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -318,7 +318,7 @@ def test_multimodal_with_logging():
             "test_type": "multimodal",
             "device": "cuda" if torch.cuda.is_available() else "cpu"
         },
-        tags=["test", "ppo", "multimodal", "gr00t-rl"]
+        tags=["test", "ppo", "multimodal", "gr00t-rl", "gr00t-ppo-testing"]
     )
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

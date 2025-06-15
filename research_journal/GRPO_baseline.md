@@ -392,6 +392,54 @@ The initial batch of new experiments (higher_temperature, mixed_dataset, smaller
 
 **Key Takeaway**: A model achieving 90% training reward is meaningless if final_accuracy is only 30%. Always check both metrics to assess true model performance.
 
+## Current Running Experiments - Reduced Diversity (2025-06-15)
+
+These experiments are running with only 4 generations per prompt (75% reduction from baseline):
+
+### Higher Temperature (lo96kcmm) - FAILING
+- Status: Near completion (epoch 49.86/50)
+- Reward: -1.0 (complete failure)
+- `frac_reward_zero_std`: 1.0 (no diversity despite temp=1.0!)
+
+### Mixed Dataset (d8uw54cn) - STRUGGLING
+- Status: Running (epoch 34.7/50)
+- Reward: -0.9375 (very poor)
+- `frac_reward_zero_std`: 0.875 (little diversity)
+
+### Smaller Numbers (ulgmyabn) - FAILING
+- Status: Running (epoch 26.08/50)
+- Reward: -1.0 (complete failure)
+- `frac_reward_zero_std`: 1.0 (no diversity)
+
+**Key Insight**: The reduced generation diversity (4 vs 16) is crippling GRPO's learning signal!
+
+## Prepared Experiments - Full Diversity Restoration (2025-06-15)
+
+To fix the diversity issue, three new experiment scripts have been prepared with:
+- **Batch size: 256** (or 240 for mixed dataset)
+- **Generations: 16** (restored from 4)
+- **Same hyperparameters** otherwise
+
+### 1. Higher Temperature Full Diversity
+**Script**: `train_grpo_arithmetic_higher_temp_full_diversity.py`
+- Temperature: 1.0 (high for diversity)
+- Batch size: 256 (supports 16 generations)
+- Expected: Better learning signal than current failing experiment
+
+### 2. Mixed Dataset Full Diversity
+**Script**: `train_grpo_arithmetic_mixed_dataset_full_diversity.py`
+- 50% arithmetic, 25% counting, 25% comparison
+- Batch size: 240 (15 batches × 16 generations)
+- Expected: Easier tasks + proper diversity = breakthrough
+
+### 3. Smaller Numbers Full Diversity
+**Script**: `train_grpo_arithmetic_smaller_numbers_full_diversity.py`
+- Numbers 0-10 instead of 0-20
+- Batch size: 256 (supports 16 generations)
+- Expected: Simpler arithmetic + proper diversity = success
+
+**Next Step**: Launch these experiments after current ones complete or are terminated.
+
 ## Working Baseline Reference (2025-06-15)
 
 ### Best Working GRPO Arithmetic Training Script

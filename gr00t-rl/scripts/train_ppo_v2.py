@@ -182,7 +182,7 @@ class PPOTrainerV2:
             entity=self.config.wandb_entity,
             name=run_name,
             config=vars(self.config),
-            tags=self.config.wandb_tags,
+            tags=self.config.wandb_tags + ["gr00t-ppo-testing"] if "gr00t-ppo-testing" not in self.config.wandb_tags else self.config.wandb_tags,
             save_code=True,
         )
         
