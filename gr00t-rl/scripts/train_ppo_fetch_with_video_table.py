@@ -129,11 +129,11 @@ def train(args):
         env_fns = [make_fetch_env(args.env_id, i, args.capture_video, run_name, 
                               args.observation_mode, args.reward_mode) 
                for i in range(args.num_envs)]
-    
-    if args.num_envs > 1:
-        envs = SubprocVecEnv(env_fns)
-    else:
-        envs = DummyVecEnv(env_fns)
+        
+        if args.num_envs > 1:
+            envs = SubprocVecEnv(env_fns)
+        else:
+            envs = DummyVecEnv(env_fns)
     
     # Create model
     model = PPOGr00tActorCriticV2(

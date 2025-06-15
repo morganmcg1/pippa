@@ -13,8 +13,11 @@ import numpy as np
 from pathlib import Path
 import time
 import torch
+from dotenv import load_dotenv
 
 def main():
+    # Load environment variables for WandB API key
+    load_dotenv()
     # Initialize WandB
     run = wandb.init(
         project="pippa",
