@@ -726,7 +726,7 @@ def main():
             save_steps=1000,
             report_to="wandb",
             remove_unused_columns=False,
-            num_generations=16,
+            num_generations=4 if batch_size < 16 else 16,  # Ensure divisibility
             temperature=temperature,
             max_completion_length=16,
             max_prompt_length=128,
@@ -837,7 +837,7 @@ def main():
                 save_steps=1000,
                 report_to="wandb",
                 remove_unused_columns=False,
-                num_generations=8,  # Fewer generations for proposer
+                num_generations=4 if batch_size < 8 else 8,  # Ensure divisibility
                 temperature=1.0,  # Higher temperature for diversity
                 max_completion_length=64,
                 max_prompt_length=128,
