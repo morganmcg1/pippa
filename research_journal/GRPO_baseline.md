@@ -846,10 +846,19 @@ All 5 retraining experiments launched on H100:
 **GPU Status**: 71GB/80GB used, 100% utilization with 4 concurrent experiments
 
 **Next Steps**:
-- Wait for experiments to complete (~30 more minutes for Mixed Dataset)
-- Run standardized evaluation on finished models
+- Wait for remaining experiments to complete
 - Compare results using the `arithmetic_eval` metric
 - Ultra diversity experiment needs to run solo or with reduced batch size
+
+### First Standardized Evaluation Results (2025-06-15_06:25 UTC)
+
+**Mixed Dataset (4mx16w5l) - COMPLETED** ❌
+- Training reward: 88.3%
+- **Standardized eval: 24% (48/200)** - WORSE than base model (38%)!
+- Previous claim of 54.7% was on easier self-generated test set
+- Shows severe overfitting to training distribution
+
+This disappointing result highlights why standardized evaluation is critical. A model can appear to perform well (88.3% training, 54.7% on own test set) but actually be worse than the base model on a fair evaluation set.
 
 **All previous accuracy numbers should be re-evaluated on this dataset for fair comparison!**
 
