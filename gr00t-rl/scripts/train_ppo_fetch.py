@@ -45,7 +45,11 @@ def make_fetch_env(env_id: str, idx: int, capture_video: bool, run_name: str,
                    observation_mode: str = "observation_goal", reward_mode: str = "sparse"):
     """Create a Fetch environment with our wrapper."""
     def thunk():
-        env = gym.make(env_id)
+        # Create env with render_mode if video capture is enabled
+        if capture_video and idx == 0:
+            env = gym.make(env_id, render_mode="rgb_array")
+        else:
+            env = gym.make(env_id)
         env = FetchGoalWrapper(
             env,
             observation_mode=observation_mode,
@@ -319,6 +323,14 @@ def train(args):
             print(f"  Policy Loss: {pg_loss.item():.4f}")
             print(f"  Entropy: {entropy_loss.item():.4f}")
             print(f"  Approx KL: {np.mean(approx_kl_divs):.4f}")
+            
+            # Manually log videos to WandB if available
+            if args.track and WANDB_AVAILABLE and args.capture_video:
+                video_dir = Path(f"videos/{run_name}")
+                if video_dir.exists():
+                    video_files = list(video_dir.glob("*.mp4"))
+                    for vf in video_files[-1:]:  # Log latest video
+                        wandb.log({f"videos/{vf.stem}": wandb.Video(str(vf))}, step=global_step)
     
     # Save final model
     model_path = f"models/{run_name}.pt"
