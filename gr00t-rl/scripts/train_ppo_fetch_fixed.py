@@ -218,8 +218,15 @@ def train(args):
             next_value = model.get_value(next_obs)
             buffer.compute_returns_and_advantages(next_value, next_done)
         
-        # Get data from buffer (explicitly pass batch_size=None to get all data at once)
-        rollout_data = buffer.get(batch_size=None)
+        # Get data from buffer - handle both dict and generator returns
+        buffer_output = buffer.get(batch_size=None)
+        
+        # If it's a generator (which it shouldn't be with batch_size=None, but happens in practice),
+        # consume it to get the full batch
+        if hasattr(buffer_output, '__next__'):
+            rollout_data = next(buffer_output)
+        else:
+            rollout_data = buffer_output
         
         # Extract individual components
         b_obs = rollout_data['observations']

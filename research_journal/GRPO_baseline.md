@@ -800,6 +800,57 @@ from datasets import load_dataset
 eval_dataset = load_dataset("morgan/arithmetic_eval", split="test")
 ```
 
+### Retraining Best Models with Standardized Evaluation (2025-06-15)
+
+#### Selected Models for Retraining
+Based on previous performance, selected 5 best configurations to retrain with standardized evaluation:
+
+1. **Mixed Small Numbers** (based on s8snd2a0 - 60.7% on 0-10 test)
+   - Mixed dataset: 50% arithmetic (0-10), 25% counting, 25% comparison
+   - 100 epochs, batch size 240, 16 generations
+   
+2. **Mixed Dataset** (based on afj0flv3 - 54.7% on 0-20 test)
+   - Mixed dataset: 50% arithmetic (0-20), 25% counting, 25% comparison
+   - 75 epochs, batch size 240, 16 generations
+   
+3. **Ultra Diversity** (based on icel5tvz - 50% with 64 generations)
+   - Ultra-high diversity: 64 generations per prompt
+   - 75 epochs, batch size 960, mixed dataset (0-20)
+   
+4. **Smaller Numbers** (based on ipnl8nmm - 45% on 0-10 test)
+   - Pure arithmetic with 0-10 numbers only
+   - 75 epochs, batch size 256, 16 generations
+   
+5. **Long Epochs** (baseline config with extended training)
+   - 100 epochs for extended training
+   - Pure arithmetic (0-20), batch size 64, 16 generations
+
+#### Current Progress (2025-06-15_06:10 UTC)
+
+All 5 retraining experiments launched on H100:
+
+| Experiment | Run ID | Status | Epoch | Training Reward | Notes |
+|------------|--------|--------|-------|-----------------|-------|
+| Long Epochs | saioj78d | Running | 8.1/100 | 0.656 | Steady progress |
+| Smaller Numbers | 1tfqo1i5 | Running | 18.2/75 | 0.820 | **Best performer!** |
+| Ultra Diversity | gd4nm1a9 | Failed | 0.1/75 | -0.983 | OOM error |
+| Mixed Dataset | 4mx16w5l | Running | 39.6/75 | 0.542 | Halfway done |
+| Mixed Small Numbers | aqjhdkpg | Running | 38.8/100 | 0.542 | Slow progress |
+
+**Key Observations**:
+- **Smaller Numbers (1tfqo1i5)** showing excellent progress with 0.820 training reward at epoch 18
+- Ultra Diversity failed due to GPU memory constraints (64 generations × batch 960 too large with 4 other experiments)
+- Both mixed dataset experiments at 0.542 reward (moderate performance)
+- Long epochs experiment progressing slowly but steadily
+
+**GPU Status**: 71GB/80GB used, 100% utilization with 4 concurrent experiments
+
+**Next Steps**:
+- Wait for experiments to complete (~30 more minutes for Mixed Dataset)
+- Run standardized evaluation on finished models
+- Compare results using the `arithmetic_eval` metric
+- Ultra diversity experiment needs to run solo or with reduced batch size
+
 **All previous accuracy numbers should be re-evaluated on this dataset for fair comparison!**
 
 ## BREAKTHROUGH: 60.7% Accuracy Achieved! (2025-06-15)
