@@ -29,7 +29,7 @@ from algorithms.ppo_gr00t_v2 import PPOGr00tActorCriticV2
 from environments.vec_isaac_env import make_vec_env, SubprocVecEnv, DummyVecEnv
 from utils.buffers import PPORolloutBuffer
 from utils.normalization import VecNormalize
-from utils.logging import compute_system_metrics
+from utils.logging import get_system_metrics
 
 
 def set_random_seed(seed: int, deterministic: bool = True):
@@ -453,7 +453,7 @@ class PPOTrainerV2:
             # Logging
             if update % self.config.log_interval == 0:
                 # Add system metrics
-                system_metrics = compute_system_metrics()
+                system_metrics = get_system_metrics()
                 update_metrics.update(system_metrics)
                 
                 # Add timing metrics

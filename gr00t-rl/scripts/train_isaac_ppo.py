@@ -27,7 +27,7 @@ from configs.isaac_lab_ppo_cfg import (
     GR00TReachingPPOCfg,
     GR00TManipulationPPOCfg
 )
-from utils.logging import compute_system_metrics
+from utils.logging import get_system_metrics
 
 
 class IsaacLabPPOTrainer:
@@ -336,7 +336,7 @@ class IsaacLabPPOTrainer:
             "train/mean_reward": rollout_data["rewards"].mean().item(),
             "train/mean_value": rollout_data["values"].mean().item(),
             **update_info,
-            **compute_system_metrics()
+            **get_system_metrics()
         }
         
         # Console logging
