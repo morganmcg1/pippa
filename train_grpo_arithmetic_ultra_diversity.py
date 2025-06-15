@@ -17,11 +17,15 @@ from datetime import datetime
 import numpy as np
 import random
 import re
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Environment setup
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["WANDB_PROJECT"] = "pippa"
-os.environ["WANDB_ENTITY"] = "wild-ai"
+os.environ["WANDB_PROJECT"] = os.getenv("WANDB_PROJECT", "pippa")
+os.environ["WANDB_ENTITY"] = os.getenv("WANDB_ENTITY", "wild-ai")
 
 @dataclass
 class ScriptArguments:
