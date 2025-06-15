@@ -778,7 +778,7 @@ def main():
             per_device_train_batch_size=batch_size,
             num_train_epochs=solver_epochs_per_iteration,
             learning_rate=learning_rate,
-            logging_steps=10,
+            logging_steps=1,  # Log every step for detailed monitoring
             save_steps=1000,
             report_to="wandb",
             remove_unused_columns=False,
@@ -889,7 +889,7 @@ def main():
                 per_device_train_batch_size=min(batch_size, len(proposer_dataset)),
                 num_train_epochs=proposer_epochs_per_iteration,
                 learning_rate=learning_rate,
-                logging_steps=10,
+                logging_steps=1,  # Log every step for detailed monitoring
                 save_steps=1000,
                 report_to="wandb",
                 remove_unused_columns=False,
