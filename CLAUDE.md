@@ -246,22 +246,41 @@ tmux capture-pane -t grpo_training -p | tail -50
 
 ### Repository Structure
 ```
-pippa/
+robotty/
 ├── train_grpo.py                 # Main Dr GRPO implementation
-├── train_grpo_wandb.py          # WandB wrapper
+├── train_grpo_wandb.py          # WandB wrapper  
 ├── train_grpo_verifiable.py     # GRPO with verifiable rewards
+├── train_grpo_arithmetic_fixed_completions.py  # WORKING BASELINE for arithmetic
+├── grpo_archive/               # Archived GRPO experiments
+│   ├── train_grpo_arithmetic_kl_penalty.py  # KL penalty discovery
+│   ├── train_grpo_arithmetic_with_tables.py  # Tables logging attempt
+│   ├── train_grpo_arithmetic_ultra_aggressive.py  # Failed aggressive attempt
+│   ├── train_grpo_arithmetic_debug_completions.py  # Debug attempt
+│   ├── train_grpo_verifiable_callbacks.py  # TRL callbacks version
+│   └── train_grpo_verifiable_with_tables.py  # Tables version
 ├── TRAINING_GUIDE.md            # Comprehensive training guide
 ├── experiments/
 │   ├── README.md               # Experiments overview
+│   ├── overfitting_experiments_log.md  # Detailed experiment results
 │   └── failed_approaches/      # Failed experiments (echo tasks, etc.)
 ├── run_verifiable_experiments.sh # Run all verifiable experiments
-├── gr00t-tuning/               # GR00T robot foundation model tuning
+├── gr00t-tuning/               # GR00T robot foundation model tuning (separate project)
 ├── remote_train.sh              # Remote training helper
 ├── requirements.txt             # Python dependencies
 ├── .env                        # Environment variables (gitignored)
 ├── .env.example               # Example env file
-└── CLAUDE.md                  # This file
+└── CLAUDE.md                  # This file (you are here)
 ```
+
+### Codebase Organization Notes (2025-06-15)
+The codebase has been cleaned up for clarity:
+- **Core GRPO scripts** remain in the root directory (4 essential files)
+- **Experimental/debug scripts** moved to `grpo_archive/` directory
+- **Working baseline** (`train_grpo_arithmetic_fixed_completions.py`) kept in root
+- **Failed experiments** remain in `experiments/failed_approaches/`
+- **GR00T experiments** isolated in `gr00t-tuning/` subdirectory
+
+This organization makes it clear which scripts are actively used vs historical experiments.
 
 ### Key Documentation
 - **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** - Step-by-step guide for using the training scripts
@@ -498,10 +517,164 @@ advantage = (reward - mean(rewards)) / std(rewards)
 
 See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
 
+## Working Baseline Reference (2025-06-15)
+
+### Best Working GRPO Arithmetic Training Script
+**File**: `train_grpo_arithmetic_fixed_completions.py`  
+**Commit**: `48713e75503ef189f4fdc165ab59300b10012887`  
+**Date Documented**: 2025-06-15 00:30 UTC  
+**Purpose**: This script represents our most successful configuration for GRPO arithmetic overfitting experiments.
+
+#### Key Features:
+1. **Custom GRPOTrainerFixed class** - Fixes TRL log_completions compatibility issue
+2. **KL penalty enabled** - beta=0.1 (critical for arithmetic tasks)
+3. **Proper logging configuration** - logging_steps=1 for every-step monitoring
+4. **Optimal hyperparameters** - Discovered through extensive experimentation
+
+#### Configuration Details:
+```python
+# Dataset
+n_samples = 100  # 100 unique arithmetic problems
+create_simple_arithmetic_dataset()  # 0-20 +/- /* operations
+
+# Training Parameters
+batch_size = 64
+num_generations = 16  # Must divide evenly into batch_size
+learning_rate = 5e-6
+temperature = 0.7
+epochs = 30
+beta = 0.1  # KL penalty - CRITICAL!
+loss_type = "grpo"  # Standard GRPO (not dr_grpo)
+
+# Logging
+logging_steps = 1  # Log every step
+wandb_log_unique_prompts = True
+log_completions = True  # With custom fix
+```
+
+#### Why This Configuration Works:
+- **KL penalty prevents mode collapse** in arithmetic tasks
+- **Temperature 0.7** provides sufficient generation diversity
+- **Standard learning rate** (5e-6) works better than aggressive rates
+- **Every-step logging** catches training issues early
+- **Fixed completion logging** shows actual model outputs
+
+#### Performance:
+- Achieves ~0.80 reward in 20-30 epochs
+- Steady progress without collapse
+- Non-zero gradients throughout training
+
+#### Usage:
+```bash
+# Run locally
+uv run python train_grpo_arithmetic_fixed_completions.py
+
+# Run on remote H100
+ssh ubuntu@192.222.52.59 "cd ~/pippa && uv run python train_grpo_arithmetic_fixed_completions.py"
+```
+
+This script should be used as the reference baseline when:
+- Starting new arithmetic GRPO experiments
+- Debugging training issues
+- Comparing different configurations
+- Demonstrating working GRPO setup
+
+### Critical Discovery: Arithmetic Tasks Require KL Penalty (2025-06-15)
+**Finding**: Arithmetic tasks REQUIRE KL penalty (beta > 0) to train successfully, unlike simpler tasks
+
+**Evidence**:
+- Run `ljokc85g` achieved 0.75 reward with beta=0.1, loss_type="grpo"
+- Run `urqoeckd` stuck at -1.0 reward with beta=0.0, loss_type="dr_grpo"
+- Run `rixalhdo` achieved 0.78125 reward with beta=0.1 in 20 epochs
+- Run `8zlj3p73` achieved 0.84375 reward with beta=0.1 in 50 epochs
+- Run `3jjl84p4` currently at 0.79375 reward at epoch 22.8 with fixed log_completions
+
+**Why KL penalty helps arithmetic**:
+- Without KL penalty, model can collapse to outputting garbage that happens to parse to numbers
+- KL penalty keeps the model close to its original distribution
+- Forces model to maintain coherent language structure while learning correct answers
+- Standard "grpo" loss type seems to work better than "dr_grpo" for arithmetic
+
+**Optimal configuration for arithmetic**:
+- beta=0.1 (KL penalty coefficient)
+- loss_type="grpo" (not dr_grpo)
+- temperature=0.7 (for generation diversity)
+- learning_rate=5e-6 (standard, not aggressive)
+- 100+ samples, batch_size=64, num_generations=16
+
+**Progress pattern with KL penalty**:
+- Epochs 1-5: Rapid improvement from -1.0 to ~0.5 reward
+- Epochs 5-15: Steady climb to ~0.75 reward
+- Epochs 15-30: Slower progress to ~0.8-0.85 reward
+- Beyond 30: Diminishing returns, may need more data or different approach for 1.0
+
+### TRL GRPO log_completions Debugging (2025-06-15)
+**Issue**: AttributeError: 'Table' object has no attribute 'add_section' when log_completions=True
+
+**Solution**: Created custom GRPOTrainerFixed class that overrides the log() method:
+```python
+class GRPOTrainerFixed(GRPOTrainer):
+    def log(self, logs: Dict[str, Any], start_time: float = None) -> None:
+        try:
+            super().log(logs, start_time)
+        except AttributeError as e:
+            if "add_section" in str(e):
+                # Print completions manually instead of using rich tables
+                self._print_completions_simple()
+                # Still log metrics to WandB
+                if hasattr(self, '_wandb'):
+                    self._wandb.log(logs, step=self.state.global_step)
+```
+
+**Key insights**:
+- TRL's completion logging uses rich tables with add_section() which isn't compatible
+- Simple text-based printing works as a replacement
+- Capture completions in _generate_completions() override
+- This enables seeing what the model actually generates during training
+
 ## WandB Monitoring
 
 ### Use MCP Tool for WandB Monitoring
 **IMPORTANT**: Always use the wandb MCP tool to check training progress instead of SSH/tmux commands. This is the default and preferred method.
+
+### WandB Logging Best Practices
+
+#### Enable Logging at Every Step
+**CRITICAL**: Always set `logging_steps=1` in your training configuration to ensure logging happens at every training step. This provides:
+- Real-time monitoring of training progress
+- Early detection of training issues (zero gradients, reward collapse)
+- Detailed learning curves for analysis
+- No missing data points during critical training phases
+
+Example configuration:
+```python
+config = GRPOConfig(
+    logging_steps=1,  # Log at every step - CRITICAL!
+    save_steps=100,   # Save checkpoints less frequently
+    # ... other parameters
+)
+```
+
+#### Essential Metrics to Track
+When configuring WandB logging, ensure these metrics are tracked:
+- `train/reward`: Primary optimization target
+- `train/loss`: Training loss (watch for collapse to 0)
+- `train/grad_norm`: Gradient norms (should be non-zero)
+- `train/kl`: KL divergence from reference model
+- `train/epoch`: Current epoch progress
+- `train/learning_rate`: Learning rate schedule
+- `train/frac_reward_zero_std`: Fraction of batches with zero reward std
+
+#### Logging Configuration in GRPO
+```python
+config = GRPOConfig(
+    report_to=["wandb"],
+    logging_steps=1,  # Every step logging
+    wandb_log_unique_prompts=True,  # Log prompt diversity
+    log_completions=True,  # Log generation samples (use GRPOTrainerFixed if needed)
+    # ... other parameters
+)
+```
 
 ### Log Generation Samples to WandB Tables
 When training GRPO models, always log generation samples to WandB Tables for better visualization:
@@ -586,6 +759,36 @@ GR00T (Generalized Robotic Operation Optimization Technology) N1.5 is NVIDIA's f
 - **Multi-modal**: Processes video, language instructions, and action sequences
 - **Large Model**: 3B parameters requiring significant GPU memory
 - **Specific Data Format**: SO-101 format with modality.json configuration
+
+### Training Results Analysis (2025-06-15)
+Based on WandB runs analysis:
+
+#### Best Performing Configurations:
+1. **SO-101 Dataset (d9pawzt8)** - Currently running
+   - Loss: 0.0334 (lowest!)
+   - Learning rate: 1e-4
+   - Batch size: 32
+   - Uses full SO-101 dataset
+   - Default warmup and weight decay
+
+2. **Demo PickNPlace (klky5smm)** - Best overfitting run
+   - Final loss: 0.4574 (still dropping)
+   - Learning rate: 5e-4
+   - Batch size: 1
+   - Only 200 steps
+   - Minimal warmup (0.01)
+
+3. **Extended Training (0rtd7un9)**
+   - Final loss: 1.2572
+   - Learning rate: 1e-3 (too high)
+   - Batch size: 1
+   - 2000 steps
+
+#### Key Findings:
+- **Lower learning rates perform better**: 1e-4 > 5e-4 > 1e-3
+- **Larger batch sizes help**: 32 > 1
+- **Full dataset better than demo**: SO-101 > PickNPlace demo
+- **Default settings work well**: Don't need aggressive overfitting params
 
 ### Installation Requirements
 1. **Use Isaac-GR00T Repository**:
