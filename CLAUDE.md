@@ -263,6 +263,7 @@ robotty/
 ├── train_grpo_wandb.py          # WandB wrapper  
 ├── train_grpo_verifiable.py     # GRPO with verifiable rewards
 ├── train_grpo_arithmetic_fixed_completions.py  # WORKING BASELINE for arithmetic
+├── train_grpo_with_standard_eval.py  # NEW TEMPLATE with standardized evaluation
 ├── grpo_archive/               # Archived GRPO experiments
 │   ├── train_grpo_arithmetic_kl_penalty.py  # KL penalty discovery
 │   ├── train_grpo_arithmetic_with_tables.py  # Tables logging attempt
@@ -278,6 +279,7 @@ robotty/
 │   ├── README.md               # Experiments overview
 │   ├── overfitting_experiments_log.md  # Detailed experiment results
 │   └── failed_approaches/      # Failed experiments (echo tasks, etc.)
+├── arithmetic_eval_dataset/    # Local copy of standardized evaluation dataset
 ├── run_verifiable_experiments.sh # Run all verifiable experiments
 ├── gr00t-tuning/               # GR00T robot foundation model tuning (separate project)
 ├── remote_train.sh              # Remote training helper
@@ -750,6 +752,40 @@ A high training reward with low final accuracy indicates overfitting. For exampl
 - Training reward: 84.4% but final_accuracy: 30% = severe overfitting
 - Training reward: 87.5% and final_accuracy: 85% = good generalization
 
+## Standardized Evaluation for GRPO Experiments (2025-06-15)
+
+### CRITICAL: All GRPO experiments must use standardized evaluation
+
+**Problem**: Previous experiments evaluated on their own training data, making comparisons invalid:
+- 60.7% accuracy was on 0-10 number problems (easier)
+- 54.7% accuracy was on 0-20 number problems (harder)
+
+**Solution**: Created standardized evaluation dataset `morgan/arithmetic_eval` on HuggingFace Hub
+- 200 problems with varying difficulty (very_easy to very_hard)
+- Fixed test set for all experiments
+- Base model baseline: ~30% accuracy
+
+### Required Template: train_grpo_with_standard_eval.py
+
+All new GRPO experiments MUST use this template which:
+1. Trains on your chosen dataset
+2. Evaluates on the standardized `morgan/arithmetic_eval` dataset
+3. Reports `arithmetic_eval` as the primary metric in WandB
+4. Enables fair comparison across all experiments
+
+**Key change**: The metric name in WandB is now `arithmetic_eval` (not `final_accuracy`)
+
+### Re-evaluating Previous Models
+
+To update previous runs with the new metric:
+1. Load the model from WandB artifacts
+2. Resume the WandB run
+3. Evaluate on `morgan/arithmetic_eval`
+4. Log as summary metric `arithmetic_eval`
+5. Finish the run
+
+Script available: `reevaluate_models_with_standard.py`
+
 ## GR00T Model Fine-tuning
 
 For detailed GR00T robot model experiment results, configurations, and learnings, see:
@@ -765,3 +801,48 @@ For technical setup and installation, see the research journal.
 Quick reference:
 - [Official Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning)
 - [Isaac-GR00T GitHub](https://github.com/NVIDIA/Isaac-GR00T)
+
+## Gymnasium-Robotics Integration
+
+### WandB Logging with Gymnasium
+
+When using Gymnasium environments with WandB, ensure proper video logging:
+
+1. **Enable monitor_gym**: Set `monitor_gym=True` in `wandb.init()`
+2. **Use RecordVideo wrapper**: WandB will automatically log videos from `gym.wrappers.RecordVideo`
+3. **Default settings**: Training scripts now have `track=True` and `capture_video=True` by default
+
+Example configuration:
+```python
+wandb.init(
+    project=args.wandb_project_name,
+    entity=args.wandb_entity,
+    sync_tensorboard=True,
+    config=vars(args),
+    name=run_name,
+    save_code=True,
+    tags=["ppo", "fetch", args.env_id],
+    monitor_gym=True  # Enable automatic Gymnasium video logging
+)
+```
+
+### Fetch Environment Training
+
+Key scripts for robotics training:
+- `gr00t-rl/scripts/train_ppo_fetch.py` - PPO training on Fetch tasks
+- `gr00t-rl/scripts/train_grpo_fetch.py` - GRPO training on Fetch tasks
+- `gr00t-rl/environments/fetch_wrapper.py` - Goal-conditioned wrapper
+
+Default configuration:
+- WandB tracking enabled by default (`--track=True`)
+- Video capture enabled by default (`--capture-video=True`)
+- Videos saved every 100 episodes
+- Support for sparse/dense/distance reward modes
+
+### Current Status (2025-06-15)
+
+- ✅ Gymnasium-Robotics integrated
+- ✅ WandB video logging configured
+- ✅ GRPO training runs successfully
+- ⚠️ PPO has minor buffer issues (generator vs dict)
+- 📝 Next: Integrate GR00T model as policy network

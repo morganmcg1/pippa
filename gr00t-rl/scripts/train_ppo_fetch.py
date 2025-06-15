@@ -71,7 +71,8 @@ def train(args):
             config=vars(args),
             name=run_name,
             save_code=True,
-            tags=["ppo", "fetch", args.env_id, args.reward_mode]
+            tags=["ppo", "fetch", args.env_id, args.reward_mode],
+            monitor_gym=True  # Enable automatic Gymnasium video logging
         )
     writer = SummaryWriter(f"runs/{run_name}")
     writer.add_text(
@@ -337,13 +338,13 @@ def main():
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=bool, default=True,
         help="if toggled, cuda will be enabled by default")
-    parser.add_argument("--track", type=bool, default=False,
+    parser.add_argument("--track", type=bool, default=True,
         help="if toggled, this experiment will be tracked with Weights and Biases")
     parser.add_argument("--wandb-project-name", type=str, default="pippa",
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default="wild-ai",
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=bool, default=False,
+    parser.add_argument("--capture-video", type=bool, default=True,
         help="whether to capture videos of the agent performances")
     
     # Algorithm arguments

@@ -846,6 +846,30 @@ Based on the 60.7% success, potential next steps include:
 3. **Curriculum within mixed tasks**: Start with more comparison, gradually increase arithmetic
 4. **Ensemble approaches**: Train multiple models on different task distributions
 
+## Critical Update: Standardized Evaluation Implementation (2025-06-15)
+
+### Key Changes Made
+1. **Created standardized evaluation dataset**: `morgan/arithmetic_eval` on HuggingFace Hub
+   - 200 problems with varying difficulty (very_easy to very_hard)
+   - Mix of operations: addition (42%), multiplication (29%), subtraction (25%), division (4%)
+   - Number ranges: 0-5 (very_easy) to 20-100 (very_hard)
+
+2. **Base model baseline established**: ~30% accuracy on standardized dataset
+   - Quick test shows Qwen2-0.5B gets about 6/20 correct
+
+3. **Created new training template**: `train_grpo_with_standard_eval.py`
+   - Uses standardized evaluation for final_accuracy metric
+   - Still reports training data accuracy for comparison
+   - All future experiments should use this template
+
+### Migration Plan
+All future experiments MUST:
+1. Use `morgan/arithmetic_eval` for final evaluation
+2. Report `standardized_eval_accuracy` as the primary metric
+3. Use the template in `train_grpo_with_standard_eval.py`
+
+Previous results (54.7%, 60.7%) need re-evaluation on standardized dataset for fair comparison!
+
 ## TRL GRPO log_completions Debugging (2025-06-15)
 **Issue**: AttributeError: 'Table' object has no attribute 'add_section' when log_completions=True
 
