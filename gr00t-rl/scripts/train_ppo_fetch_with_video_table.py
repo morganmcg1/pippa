@@ -99,13 +99,8 @@ def train(args):
             log_mode="INCREMENTAL"
         )
         
-        # Also create a mutable table for the latest videos (keeps last N videos)
-        latest_videos_table = wandb.Table(
-            columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
-            log_mode="MUTABLE"
-        )
-        latest_videos_data = []  # Store data for mutable table
-        max_latest_videos = 10  # Keep last 10 videos
+        # Track if we've logged any videos yet
+        videos_logged = False
         
     # Setup tensorboard writer
     writer = SummaryWriter(f"runs/{run_name}")
@@ -163,6 +158,7 @@ def train(args):
     
     # Tracking for episodes
     episode_count = 0
+    env0_episode_count = 0  # Track episodes specifically for env 0
     recent_episodes = deque(maxlen=100)
     
     # Video tracking
@@ -226,12 +222,12 @@ def train(args):
                     # Track this episode for video checking
                     if idx == 0:  # Only env 0 records videos
                         # Track episodes for env 0 specifically
-                        env0_episode_num = episode_count // args.num_envs  # Approximate episode number for env 0
-                        video_episode_tracker[env0_episode_num] = {
+                        video_episode_tracker[env0_episode_count] = {
                             "global_step": global_step,
                             "episode_data": episode_data,
                             "actual_episode": episode_count
                         }
+                        env0_episode_count += 1
                     
                     # Log individual episode to tensorboard
                     writer.add_scalar("charts/episodic_return", episode_data["episode_return"], global_step)
@@ -282,20 +278,8 @@ def train(args):
                                 ep_data["episode_final_distance"]
                             )
                             
-                            # Add to latest videos data
-                            latest_videos_data.append([
-                                ep_info["global_step"],
-                                episode_num,
-                                video_obj,
-                                ep_data["episode_return"],
-                                ep_data["episode_length"],
-                                ep_data["episode_success"],
-                                ep_data["episode_final_distance"]
-                            ])
-                            
-                            # Keep only the most recent videos
-                            if len(latest_videos_data) > max_latest_videos:
-                                latest_videos_data = latest_videos_data[-max_latest_videos:]
+                            # Mark that we've added videos
+                            videos_logged = True
                             
                             # Mark as logged
                             video_episode_tracker[episode_num]["logged"] = True
@@ -446,17 +430,9 @@ def train(args):
         
         # Log all metrics and tables to WandB
         if args.track and WANDB_AVAILABLE:
-            # Log the incremental video table
-            wandb.log({"video_table": video_table}, step=global_step)
-            
-            # Update and log the mutable latest videos table
-            if latest_videos_data:
-                latest_videos_table = wandb.Table(
-                    columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
-                    data=latest_videos_data,
-                    log_mode="MUTABLE"
-                )
-                wandb.log({"latest_videos": latest_videos_table}, step=global_step)
+            # Log the incremental video table only when we have new videos
+            if videos_logged:
+                wandb.log({"video_table": video_table}, step=global_step)
             
             # Log all other metrics
             wandb.log(metrics, step=global_step)
@@ -499,7 +475,7 @@ def train(args):
         })
         
         # Log final complete video table as IMMUTABLE
-        if video_table.data:
+        if hasattr(video_table, 'data') and video_table.data:
             final_video_table = wandb.Table(
                 columns=video_table.columns,
                 data=video_table.data,
