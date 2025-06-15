@@ -115,6 +115,37 @@ Ready to run first experiment!
 - Better prompts with explicit format: "Calculate: X op Y = "
 - Print logging shows parsing success rate and sample outputs
 
+### Critical Discovery - 2025-06-15_20:19
+**Proposer Failure**: Testing iter 6 proposer revealed it's generating complex word problems instead of arithmetic!
+
+Examples of broken output:
+- "20% of the vets in a state recommend Puppy Kibble..."
+- "36 people attend a party. Each person shakes hands..."
+- Python code snippets instead of arithmetic problems
+
+**Root Cause**: 
+1. Proposer training with 0 rewards led to mode collapse
+2. No few-shot examples to guide generation
+3. Model defaulted to its pre-training on general text
+
+### Emergency Fix Session - 2025-06-15_20:20
+**Actions Taken:**
+1. Stopped the broken run (iteration 8/20)
+2. Added few-shot examples to all prompts:
+   ```
+   "Generate arithmetic: Calculate: 5 + 3 = 
+    Generate arithmetic: Calculate: 12 - 7 = 
+    Generate arithmetic: "
+   ```
+3. Fixed per-problem reward calculation
+4. Improved parsing to handle multiple formats
+5. Launched new run: `absolute_zero_improved`
+
+**New Run Details:**
+- Session: `absolute_zero_improved` 
+- Start time: 2025-06-15_20:21
+- Key fixes: Few-shot prompts, individual rewards, better parsing
+
 ## Key Metrics to Track
 1. **Solver Accuracy**: On standardized eval set
 2. **Problem Difficulty**: Average difficulty of generated problems

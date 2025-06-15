@@ -113,8 +113,13 @@ tune_diffusion_model = True  # Train action head
 
 **Recommendations**:
 - For production training: Use batch size 64-96 (leaves headroom)
-- For maximum throughput: Use batch size 128
+- For maximum throughput: Use batch size 128 ✅ (VERIFIED)
 - With gradient accumulation: Can simulate larger effective batch sizes
+
+**Optimal Configuration**: Batch size 128
+- 90% GPU memory utilization (73.6GB/80GB)
+- 99% GPU compute utilization
+- 2x faster than batch size 64
 
 ### 2. Overfitting Test - 2025-06-15_20:12
 **Hypothesis**: Verify model can memorize small dataset subset to validate training pipeline
@@ -173,6 +178,27 @@ save_steps = 50
 - Verify saved artifacts include all required components
 - Test loading the saved model for inference
 
+### 4. Optimized Overfitting Run - 2025-06-15_20:21
+**Run ID**: Will appear in WandB as gr00t-sft-1000samples-20250615_202115
+**Status**: ✅ RUNNING with batch size 128
+
+**Configuration**:
+- **Batch size: 128** (maximum for H100)
+- Learning rate: 1e-4
+- Max steps: 1000
+- Dataset samples: 1000
+- GPU utilization: 99% compute, 90% memory
+
+**Early Results**:
+- Starting loss: 0.625
+- Training speed: 1.64s/iteration
+- Expected to converge 2x faster than batch size 64
+
+**Key Improvements**:
+- Maximum GPU utilization achieved
+- Doubled throughput compared to previous runs
+- Still stable training with proper gradients
+
 ## Technical Notes
 
 ### Memory Considerations
@@ -217,6 +243,33 @@ model = GR00T_N1_5.from_pretrained(base_model_path)
 projector_weights = torch.load(f"{artifact_dir}/projector_new_embodiment.pt")
 model.load_state_dict(projector_weights, strict=False)
 ```
+
+## Summary of Key Findings (2025-06-15)
+
+### 1. **Batch Size Optimization**
+- H100 maximum batch size: **128** (73.6GB memory, 99% GPU utilization)
+- Blog baseline (batch size 4) is extremely conservative
+- Batch size 128 provides 2x faster training than batch size 64
+
+### 2. **Overfitting Validation**
+- Successfully achieved rapid loss reduction: 0.625 → 0.0856 in 111 steps
+- Standard hyperparameters (lr=1e-4, weight_decay=0.05) work perfectly
+- No need for aggressive learning rates or special tricks
+
+### 3. **Critical Implementation Details**
+- Always clean GPU before training
+- Use reasonable batch sizes (avoid batch_size=1)
+- Enhanced WandB saving to include all required components:
+  - `gr00t_policy.pt` (full model weights)
+  - `projector_new_embodiment.pt` (embodiment adapter)
+  - `modality.json` (dataset configuration)
+
+### 4. **Best Practices**
+- Always use tmux for remote training
+- Monitor both WandB and tmux output
+- Save checkpoints frequently (every max_steps/4)
+- Use batch size 64-96 for production (leaves headroom)
+- Use batch size 128 for maximum throughput
 
 ## References
 - [GR00T N1.5 SO-101 Fine-tuning Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning) - Official NVIDIA blog post

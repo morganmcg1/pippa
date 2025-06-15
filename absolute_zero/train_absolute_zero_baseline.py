@@ -383,9 +383,15 @@ class AbsoluteZeroTrainer:
     
     def create_training_datasets(self, num_samples: int) -> Tuple[Dataset, Dataset, List[Dict], List[Dict]]:
         """Create training datasets for both proposer and solver."""
-        # Generate problems using proposer
-        print(f"Generating {num_samples} problems using proposer...")
-        generated_problems, raw_generations = self.generate_problems(num_samples)
+        # Generate MORE problems than needed to account for parsing failures
+        oversample_factor = 2.0  # Generate 2x more to ensure we get enough valid ones
+        num_to_generate = int(num_samples * oversample_factor)
+        
+        print(f"Generating {num_to_generate} problems (oversampling {oversample_factor}x to get {num_samples} valid)...")
+        generated_problems, raw_generations = self.generate_problems(num_to_generate)
+        
+        # Filter to only valid problems
+        print(f"Generated {len(generated_problems)} valid problems from {num_to_generate} attempts")
         
         # Add some seed problems to ensure initial learning
         seed_problems = []
