@@ -60,6 +60,7 @@ def make_fetch_env(env_id: str, idx: int, capture_video: bool, run_name: str,
         
         if capture_video and idx == 0:
             # Record every episode for debugging (change back to % 5 for production)
+            print(f"Adding RecordVideo wrapper to env {idx} with path: videos/{run_name}")
             env = gym.wrappers.RecordVideo(
                 env, f"videos/{run_name}",
                 episode_trigger=lambda episode_id: True,  # Record every episode
@@ -114,6 +115,7 @@ def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
     
     # Create environments
+    print(f"Creating {args.num_envs} environments with capture_video={args.capture_video}")
     env_fns = [make_fetch_env(args.env_id, i, args.capture_video, run_name, 
                               args.observation_mode, args.reward_mode) 
                for i in range(args.num_envs)]
