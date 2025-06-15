@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
 """
-Absolute Zero baseline implementation for arithmetic tasks.
-Based on https://arxiv.org/pdf/2505.03335v2 and our successful GRPO experiments.
-
-Key components:
-1. Proposer: Generates new arithmetic problems
-2. Solver: Solves the generated problems  
-3. Learnability reward: Proposer rewarded for problems that help solver improve
-4. TRR++ algorithm: Task-Relative REINFORCE++ with 6 separate baselines
+Absolute Zero with enhanced WandB callbacks for logging samples during training.
+Based on train_absolute_zero_baseline.py but with better logging.
 """
 
 import torch
@@ -23,7 +17,6 @@ import re
 from typing import Dict, Any, List, Tuple
 from collections import deque
 import copy
-import argparse
 
 # Load environment variables
 load_dotenv()
@@ -37,6 +30,134 @@ random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
+
+
+class WandBSampleLoggingCallback(TrainerCallback):
+    """Callback to log sample generations to WandB tables during training."""
+    
+    def __init__(self, role: str, iteration: int, tokenizer, num_samples: int = 10):
+        self.role = role  # 'proposer' or 'solver'
+        self.iteration = iteration
+        self.tokenizer = tokenizer
+        self.num_samples = num_samples
+        self.table_name = f"{role}_samples_iter_{iteration}"
+        
+        # Create table based on role
+        if role == 'proposer':
+            self.columns = ["step", "prompt", "generation", "parsed_problem", "reward"]
+        else:  # solver
+            self.columns = ["step", "problem", "predicted_answer", "correct_answer", "is_correct", "reward"]
+        
+        self.table = wandb.Table(columns=self.columns)
+        self.logged_steps = set()
+    
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        """Log samples during training at logging steps."""
+        if logs is None or state.global_step in self.logged_steps:
+            return
+        
+        # Only log at certain intervals to avoid too much data
+        if state.global_step % 10 == 0:
+            self._log_samples(state, kwargs.get('model'), logs)
+            self.logged_steps.add(state.global_step)
+    
+    def _log_samples(self, state, model, logs):
+        """Generate and log sample outputs."""
+        if model is None:
+            return
+        
+        model.eval()
+        
+        # Get some sample prompts
+        if self.role == 'proposer':
+            # Proposer prompts
+            test_prompts = [
+                "Generate arithmetic: Calculate: 5 + 3 = \nGenerate arithmetic: Calculate: 12 - 7 = \nGenerate arithmetic: ",
+                "Problem: Calculate: 8 + 4 = \nProblem: Calculate: 15 - 6 = \nProblem: ",
+                "Create: Calculate: 3 * 4 = \nCreate: Calculate: 7 * 2 = \nCreate: ",
+            ]
+        else:
+            # Solver prompts
+            test_prompts = [
+                "Calculate: 5 + 3 = ",
+                "Calculate: 12 - 7 = ",
+                "Calculate: 8 * 4 = ",
+                "Calculate: 15 + 6 = ",
+                "Calculate: 9 - 2 = ",
+            ]
+        
+        # Sample a few prompts
+        prompts_to_test = random.sample(test_prompts, min(len(test_prompts), 3))
+        
+        with torch.no_grad():
+            for prompt in prompts_to_test:
+                inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
+                
+                # Generate
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=32 if self.role == 'proposer' else 16,
+                    temperature=1.0 if self.role == 'proposer' else 0.7,
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id
+                )
+                
+                generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                completion = generated[len(prompt):].strip()
+                
+                # Get reward from logs if available
+                reward = logs.get('train/rewards/proposer_reward_function/mean' if self.role == 'proposer' 
+                                else 'train/rewards/solver_reward_function/mean', 0.0)
+                
+                if self.role == 'proposer':
+                    # Parse the problem
+                    match = re.search(r'Calculate:\s*(\d+)\s*([+\-*])\s*(\d+)\s*=', completion)
+                    parsed = match.group(0) if match else "PARSE_FAILED"
+                    
+                    self.table.add_data(
+                        state.global_step,
+                        prompt[-50:],  # Last 50 chars of prompt
+                        completion[:100],  # First 100 chars of generation
+                        parsed,
+                        reward
+                    )
+                else:
+                    # Solver - check answer
+                    answer_match = re.match(r'^-?\d+', completion)
+                    predicted = answer_match.group(0) if answer_match else completion.split()[0] if completion else ""
+                    
+                    # Calculate correct answer
+                    problem_match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', prompt)
+                    if problem_match:
+                        a, op, b = problem_match.groups()
+                        a, b = int(a), int(b)
+                        if op == '+':
+                            correct = str(a + b)
+                        elif op == '-':
+                            correct = str(a - b)
+                        elif op == '*':
+                            correct = str(a * b)
+                        else:
+                            correct = "?"
+                    else:
+                        correct = "?"
+                    
+                    is_correct = predicted == correct
+                    
+                    self.table.add_data(
+                        state.global_step,
+                        prompt,
+                        predicted,
+                        correct,
+                        is_correct,
+                        reward
+                    )
+        
+        model.train()
+    
+    def on_train_end(self, args, state, control, **kwargs):
+        """Log the table at the end of training."""
+        wandb.log({self.table_name: self.table})
 
 
 class TRRPlusBaselines:
@@ -494,58 +615,26 @@ class AbsoluteZeroTrainer:
 
 
 def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Absolute Zero training")
-    parser.add_argument("--iterations", type=int, default=20, help="Total iterations")
-    parser.add_argument("--samples", type=int, default=100, help="Samples per iteration")
-    parser.add_argument("--solver-epochs", type=int, default=5, help="Solver epochs per iteration")
-    parser.add_argument("--proposer-epochs", type=int, default=3, help="Proposer epochs per iteration")
-    parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
-    parser.add_argument("--quick-test", action="store_true", help="Quick test with minimal parameters")
-    parser.add_argument("--name-suffix", type=str, default="", help="Suffix for WandB run name")
-    args = parser.parse_args()
-    
     # Configuration
     model_name = "Qwen/Qwen2-0.5B-Instruct"
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # Training configuration (based on GRPO success)
-    if args.quick_test:
-        total_iterations = 2
-        samples_per_iteration = 10
-        solver_epochs_per_iteration = 1
-        proposer_epochs_per_iteration = 1
-        batch_size = 4
-        print("\n*** QUICK TEST MODE ***")
-        print(f"Iterations: {total_iterations}, Samples: {samples_per_iteration}, Epochs: {solver_epochs_per_iteration}/{proposer_epochs_per_iteration}")
-        print("*** QUICK TEST MODE ***\n")
-    else:
-        total_iterations = args.iterations
-        samples_per_iteration = args.samples
-        solver_epochs_per_iteration = args.solver_epochs
-        proposer_epochs_per_iteration = args.proposer_epochs
-        batch_size = args.batch_size
-    
+    total_iterations = 20
+    samples_per_iteration = 100
+    solver_epochs_per_iteration = 5
+    proposer_epochs_per_iteration = 3
+    batch_size = 32  # Smaller due to two models in memory
     learning_rate = 5e-6
     temperature = 0.7
     beta = 0.1  # KL penalty
     
     # Initialize WandB
-    run_name = "absolute_zero_baseline"
-    if args.quick_test:
-        run_name = "absolute_zero_quick_test"
-    if args.name_suffix:
-        run_name += f"_{args.name_suffix}"
-    
-    tags = ["absolute-zero", "arithmetic", "self-play"]
-    if args.quick_test:
-        tags.append("quick-test")
-    
     wandb.init(
         project=os.getenv("WANDB_PROJECT", "pippa"),
         entity=os.getenv("WANDB_ENTITY", "wild-ai"),
-        name=run_name,
-        tags=tags,
+        name="absolute_zero_with_callbacks",
+        tags=["absolute-zero", "arithmetic", "self-play", "enhanced-logging"],
         config={
             "model": model_name,
             "total_iterations": total_iterations,
@@ -561,54 +650,53 @@ def main():
         }
     )
     
-    print("\\n" + "="*60)
-    print("ABSOLUTE ZERO BASELINE IMPLEMENTATION")
+    print("\n" + "="*60)
+    print("ABSOLUTE ZERO WITH ENHANCED CALLBACKS")
     print("="*60)
     print(f"Model: {model_name}")
     print(f"Device: {device}")
     print(f"Total iterations: {total_iterations}")
     print(f"Samples per iteration: {samples_per_iteration}")
-    print("="*60 + "\\n")
+    print("="*60 + "\n")
     
     # Initialize trainer
     trainer = AbsoluteZeroTrainer(model_name, device)
     
-    # Initialize WandB tables for tracking
-    proposer_table = wandb.Table(columns=["iteration", "prompt_type", "raw_output", "parsed_problem", "parsed_success"])
-    solver_table = wandb.Table(columns=["iteration", "problem", "solver_answer", "correct_answer", "is_correct", "difficulty"])
+    # Initialize overall tracking tables
+    iteration_summary_table = wandb.Table(columns=[
+        "iteration", "solver_accuracy", "proposer_reward_mean", 
+        "problems_generated", "problems_parsed", "training_time"
+    ])
     
     # Main training loop
     for iteration in range(total_iterations):
-        print(f"\\n{'='*60}")
+        iteration_start_time = wandb.run.time()
+        
+        print(f"\n{'='*60}")
         print(f"ITERATION {iteration + 1}/{total_iterations}")
         print(f"{'='*60}")
         
         # Create datasets for this iteration
         proposer_dataset, solver_dataset, raw_generations, solver_results = trainer.create_training_datasets(samples_per_iteration)
         
-        # Log proposer generations to WandB table
-        for gen in raw_generations[:20]:  # Log first 20 for visibility
-            proposer_table.add_data(
-                iteration + 1,
-                gen['prompt_type'],
+        # Log iteration-specific generation samples
+        generation_table = wandb.Table(columns=[
+            "prompt_type", "raw_output", "parsed_problem", "is_correct", "difficulty"
+        ])
+        
+        for i, (gen, result) in enumerate(zip(raw_generations[:20], solver_results[:20])):
+            generation_table.add_data(
+                gen['prompt_type'][-50:],  # Last 50 chars
                 gen['raw_output'],
-                gen.get('final_problem', 'N/A'),
-                gen['parsed']
+                gen.get('final_problem', 'PARSE_FAILED'),
+                result.get('is_correct', False),
+                result.get('difficulty', 'unknown')
             )
         
-        # Log solver results to WandB table
-        for result in solver_results[:20]:  # Log first 20 for visibility
-            solver_table.add_data(
-                iteration + 1,
-                result['prompt'],
-                result['solver_answer'],
-                result['correct_answer'],
-                result['is_correct'],
-                result['difficulty']
-            )
+        wandb.log({f"generation_samples_iter_{iteration+1}": generation_table})
         
         # Train solver
-        print(f"\\nTraining solver for {solver_epochs_per_iteration} epochs...")
+        print(f"\nTraining solver for {solver_epochs_per_iteration} epochs...")
         
         # Define solver reward function
         def solver_reward_function(completions: List[str], prompts: List[str] = None, **kwargs) -> List[float]:
@@ -671,6 +759,7 @@ def main():
             dataloader_num_workers=0,
             bf16=True,
             gradient_checkpointing=True,
+            logging_first_step=True,  # Log first step
         )
         
         # For the first iteration, use model name; for subsequent iterations, we need to save and reload
@@ -682,12 +771,13 @@ def main():
             trainer.solver_model.save_pretrained(solver_model_path)
             trainer.tokenizer.save_pretrained(solver_model_path)
         
-        # Create custom GRPO trainer for solver
+        # Create custom GRPO trainer for solver with callback
         solver_trainer = GRPOTrainer(
             model=solver_model_path,
             args=solver_config,
             train_dataset=solver_dataset,
-            reward_funcs=[solver_reward_function]
+            reward_funcs=[solver_reward_function],
+            callbacks=[WandBSampleLoggingCallback('solver', iteration + 1, trainer.tokenizer)]
         )
         
         # Train solver
@@ -698,7 +788,7 @@ def main():
         trainer.tokenizer = solver_trainer.tokenizer
         
         # Evaluate solver on standard dataset
-        print("\\nEvaluating solver on standard dataset...")
+        print("\nEvaluating solver on standard dataset...")
         solver_metrics = evaluate_on_standard_dataset(trainer.solver_model, trainer.tokenizer, device)
         print(f"Solver accuracy: {solver_metrics['eval_accuracy']:.2%}")
         
@@ -709,8 +799,9 @@ def main():
         })
         
         # Train proposer (if we have enough data)
+        proposer_mean_reward = 0.0
         if len(proposer_dataset) > 0:
-            print(f"\\nTraining proposer for {proposer_epochs_per_iteration} epochs...")
+            print(f"\nTraining proposer for {proposer_epochs_per_iteration} epochs...")
             
             # Define proposer reward function based on learnability
             def proposer_reward_function(completions: List[str], prompts: List[str] = None, **kwargs) -> List[float]:
@@ -765,6 +856,7 @@ def main():
                 dataloader_num_workers=0,
                 bf16=True,
                 gradient_checkpointing=True,
+                logging_first_step=True,  # Log first step
             )
             
             # For the first iteration, use model name; for subsequent iterations, we need to save and reload
@@ -776,12 +868,13 @@ def main():
                 trainer.proposer_model.save_pretrained(proposer_model_path)
                 trainer.tokenizer.save_pretrained(proposer_model_path)
             
-            # Create custom GRPO trainer for proposer
+            # Create custom GRPO trainer for proposer with callback
             proposer_trainer = GRPOTrainer(
                 model=proposer_model_path,
                 args=proposer_config,
                 train_dataset=proposer_dataset,
-                reward_funcs=[proposer_reward_function]
+                reward_funcs=[proposer_reward_function],
+                callbacks=[WandBSampleLoggingCallback('proposer', iteration + 1, trainer.tokenizer)]
             )
             
             # Train proposer
@@ -789,6 +882,9 @@ def main():
             
             # Update proposer model
             trainer.proposer_model = proposer_trainer.model
+            
+            # Calculate mean reward
+            proposer_mean_reward = np.mean([r['learnability_reward'] for r in proposer_dataset])
         
         # Log baseline statistics
         baseline_stats = {}
@@ -799,20 +895,30 @@ def main():
         
         wandb.log(baseline_stats)
         
-        # Log tables for this iteration
-        wandb.log({f"proposer_generations_iter_{iteration+1}": proposer_table})
-        wandb.log({f"solver_results_iter_{iteration+1}": solver_table})
+        # Calculate iteration metrics
+        parsed_count = sum(1 for g in raw_generations if g['parsed'])
+        iteration_time = wandb.run.time() - iteration_start_time
         
-        # Reset tables for next iteration
-        proposer_table = wandb.Table(columns=["iteration", "prompt_type", "raw_output", "parsed_problem", "parsed_success"])
-        solver_table = wandb.Table(columns=["iteration", "problem", "solver_answer", "correct_answer", "is_correct", "difficulty"])
+        # Add to iteration summary table
+        iteration_summary_table.add_data(
+            iteration + 1,
+            solver_metrics['eval_accuracy'],
+            proposer_mean_reward,
+            len(raw_generations),
+            parsed_count,
+            iteration_time
+        )
         
-        print(f"\\nIteration {iteration + 1} complete!")
+        print(f"\nIteration {iteration + 1} complete!")
         print(f"Solver accuracy: {solver_metrics['eval_accuracy']:.2%}")
+        print(f"Proposer mean reward: {proposer_mean_reward:.3f}")
         print(f"Baselines updated: {len(baseline_stats)} values")
     
+    # Log final summary table
+    wandb.log({"iteration_summary": iteration_summary_table})
+    
     # Final evaluation
-    print("\\n" + "="*60)
+    print("\n" + "="*60)
     print("FINAL EVALUATION")
     print("="*60)
     
@@ -826,13 +932,13 @@ def main():
     })
     
     # Save models
-    print("\\nSaving models...")
+    print("\nSaving models...")
     trainer.solver_model.save_pretrained("./absolute_zero_solver_final")
     trainer.proposer_model.save_pretrained("./absolute_zero_proposer_final")
     trainer.tokenizer.save_pretrained("./absolute_zero_tokenizer")
     
     wandb.finish()
-    print("\\nTraining complete!")
+    print("\nTraining complete!")
 
 
 if __name__ == "__main__":

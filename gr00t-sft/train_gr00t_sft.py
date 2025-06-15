@@ -33,6 +33,39 @@ from gr00t.model.transforms import EMBODIMENT_TAG_MAPPING
 from gr00t.utils.peft import get_lora_model
 
 
+class SubsetLeRobotSingleDataset(LeRobotSingleDataset):
+    """Wrapper to create a subset of LeRobotSingleDataset while maintaining the same interface."""
+    
+    def __init__(self, base_dataset: LeRobotSingleDataset, max_samples: int):
+        """Initialize subset wrapper without calling parent __init__."""
+        # Copy all attributes from base dataset
+        self.__dict__.update(base_dataset.__dict__.copy())
+        
+        # Store original length
+        self._original_length = len(base_dataset)
+        
+        # Create subset indices
+        self._subset_indices = list(range(min(max_samples, self._original_length)))
+        self._subset_length = len(self._subset_indices)
+        
+        print(f"Created subset: {self._subset_length} samples from original {self._original_length}")
+    
+    def __len__(self):
+        """Return subset length."""
+        return self._subset_length
+    
+    def __getitem__(self, idx):
+        """Get item from subset."""
+        if idx >= self._subset_length:
+            raise IndexError(f"Index {idx} out of range for subset of size {self._subset_length}")
+        
+        # Map subset index to original index
+        original_idx = self._subset_indices[idx]
+        
+        # Call parent's getitem with original index
+        return super().__getitem__(original_idx)
+
+
 @dataclass
 class ArgsConfig:
     """Configuration for GR00T model fine-tuning with WandB support."""
@@ -277,12 +310,18 @@ def main(config: ArgsConfig):
             video_backend=config.video_backend,
         )
         
-        # Note: max_samples feature not yet implemented for LeRobotSingleDataset
-        if config.max_samples > 0:
-            print(f"Warning: max_samples={config.max_samples} specified but feature not yet implemented")
-            print(f"Dataset has {len(train_dataset)} samples total")
+        full_dataset_size = len(train_dataset)
         
-        print(f"Loaded single dataset from {config.dataset_path[0]} with {len(train_dataset)} samples")
+        # Apply max_samples if specified
+        if config.max_samples > 0 and config.max_samples < full_dataset_size:
+            # Use our custom wrapper to maintain type compatibility
+            train_dataset = SubsetLeRobotSingleDataset(train_dataset, config.max_samples)
+            print(f"Applied max_samples={config.max_samples} - using subset of dataset")
+            print(f"Original dataset size: {full_dataset_size}, subset size: {len(train_dataset)}")
+        else:
+            print(f"Using full dataset with {len(train_dataset)} samples")
+        
+        print(f"Dataset ready from {config.dataset_path[0]}")
     else:
         single_datasets = []
         for dataset_path in config.dataset_path:

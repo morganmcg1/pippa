@@ -144,7 +144,27 @@ Examples of broken output:
 **New Run Details:**
 - Session: `absolute_zero_improved` 
 - Start time: 2025-06-15_20:21
+- Run ID: iwpb33bn
 - Key fixes: Few-shot prompts, individual rewards, better parsing
+- **Early Results**: Proposer generating valid arithmetic! Rewards working (avg 1.039)
+
+### Improved Problem Generation - 2025-06-15_20:35
+**Enhancements Implemented:**
+1. **Oversampling**: Generate 2x problems, use only valid ones
+2. **Multi-generation**: Use `num_return_sequences=4` for efficiency  
+3. **Validation Pipeline**: Parse → Verify format → Compute answer
+4. **Success Rate Tracking**: Monitor proposer's generation quality
+
+**Key Learning**: The proposer was generating ~100 problems per iteration. With oversampling and validation, we can ensure all problems used for training are valid arithmetic.
+
+### Paper Clarification - 2025-06-15_20:40
+**Research Finding**: The Absolute Zero paper confirms our approach:
+- Proposer generates **tasks only**, not answers
+- External verifier (code executor/Python) provides ground truth
+- Proposer learns from "learnability rewards" - which problems help solver improve
+- Focus is on curriculum learning, not proposer's arithmetic ability
+
+**Implication**: Our implementation is correctly aligned with the paper's design philosophy.
 
 ## Key Metrics to Track
 1. **Solver Accuracy**: On standardized eval set
@@ -218,6 +238,39 @@ Examples of broken output:
 2. **Mode Collapse**: Proposer might converge to single problem type
 3. **Credit Assignment**: Determining which problems actually helped
 4. **Compute Cost**: Training two models simultaneously
+
+## Current Status (2025-06-15_20:45)
+
+### Running Experiment: `absolute_zero_improved`
+- **WandB Run ID**: iwpb33bn
+- **Status**: Training in progress (iteration 3/20 as of 20:40)
+- **Proposer Performance**: Generating valid arithmetic problems with few-shot prompts
+- **Solver Performance**: 18% accuracy (concerning - much lower than 75% GRPO baseline)
+- **Key Metrics**:
+  - Iteration 1: Solver 21.5% accuracy (43/200 correct)
+  - Iteration 2: Solver 18.0% accuracy (36/200 correct) - DECLINING!
+  - Proposer rewards: Working but very low (mean 0.10)
+  - Problem generation: Successfully parsing arithmetic format
+  - Training time: ~11 minutes per iteration
+
+### Concerning Issues
+- **Solver accuracy is decreasing** (21.5% → 18.0%)
+- **Much worse than GRPO baseline** (18% vs 75%)
+- **Proposer rewards very low** (0.10 mean)
+
+### Next Steps
+1. Monitor full 20 iterations for curriculum emergence
+2. Investigate why solver accuracy is so low
+3. Check if proposer is generating appropriate difficulty problems
+4. Consider adjusting hyperparameters if no improvement by iteration 5
+
+### Lessons Learned
+1. **Few-shot prompts are critical** - Without examples, model reverts to general text
+2. **Individual rewards matter** - Per-problem rewards prevent mode collapse
+3. **Oversampling helps** - Generate extra to ensure quality
+4. **Paper alignment confirmed** - Proposer generates problems, not answers
+5. **Self-play may hurt initial performance** - Solver accuracy much lower than supervised baseline (18% vs 75%)
+6. **Curriculum learning is slow** - No improvement in first 2 iterations
 
 ## References
 - [Absolute Zero Paper](https://arxiv.org/pdf/2505.03335v2)
