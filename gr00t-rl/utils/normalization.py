@@ -344,15 +344,17 @@ class VecNormalize:
     def train(self, mode: bool = True):
         """Set training mode."""
         self.training = mode
-        if hasattr(self, 'obs_rms'):
-            if isinstance(self.obs_rms, dict):
-                for rms in self.obs_rms.values():
-                    rms.train(mode)
-            else:
-                self.obs_rms.train(mode)
-        if hasattr(self, 'return_rms'):
-            self.return_rms.train(mode)
-            
-    def eval(self):
-        """Set evaluation mode."""
-        self.train(False)
+    
+    @property
+    def observation_space(self):
+        """Return the observation space of the wrapped environment."""
+        return self.venv.observation_space
+    
+    @property
+    def action_space(self):
+        """Return the action space of the wrapped environment."""
+        return self.venv.action_space
+    
+    def __getattr__(self, name):
+        """Forward all other attributes to the wrapped environment."""
+        return getattr(self.venv, name)
