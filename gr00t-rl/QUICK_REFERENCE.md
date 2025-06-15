@@ -4,49 +4,59 @@
 
 ### Training
 ```bash
-# Test PPO implementation
-uv run python scripts/test_ppo_v2.py
+# Test PPO with Gymnasium-Robotics
+python scripts/train_ppo_gr00t.py --debug
 
-# Train with PPO
-uv run python scripts/train_ppo_v2.py --env Pendulum-v1 --num-envs 16
+# Train with GR00T (once integrated)
+python scripts/train_ppo_gr00t.py \
+    --env-id FetchPickAndPlace-v3 \
+    --use-groot-lite False \
+    --groot-model-path nvidia/GR00T-N1.5-3B \
+    --freeze-vision --freeze-language
 
-# Train with Isaac Lab (future)
-./isaaclab.sh -p source/standalone/workflows/rsl_rl/train.py \
-    --task Isaac-Humanoid-Direct-v0 --num_envs 2048
+# Test with smaller model
+python scripts/train_ppo_gr00t.py \
+    --use-groot-lite \
+    --debug
 ```
 
 ### Setup
 ```bash
-# Clone repos
+# Clone and install Isaac-GR00T
 git clone https://github.com/NVIDIA/Isaac-GR00T
-git clone https://github.com/isaac-sim/IsaacLab
-git clone https://github.com/leggedrobotics/rsl_rl
+cd Isaac-GR00T
+uv pip install -e .
+
+# Install additional dependencies
+uv pip install transformers diffusers peft
 ```
 
 ## GR00T Integration Pattern
 
 ```python
-# 1. Load GR00T model
-from gr00t.policy import Gr00tPolicy
-policy = Gr00tPolicy.from_pretrained(
+# 1. Load GR00T model for Fetch robot
+from gr00t.model import GrootPolicy
+from gr00t.embodiments import EmbodimentTag
+
+policy = GrootPolicy.from_pretrained(
     "nvidia/GR00T-N1.5-3B",
-    embodiment_tag="GR1",
-    freeze_backbone=True
+    embodiment_tag=EmbodimentTag.NEW_EMBODIMENT,
+    action_dim=4,  # Fetch: dx, dy, dz, gripper
+    proprio_dim=13  # Fetch observation size
 )
 
-# 2. Wrap with critic for PPO
-class Gr00tActorCritic(nn.Module):
-    def __init__(self, gr00t_policy, obs_dim):
-        super().__init__()
-        self.gr00t = gr00t_policy
-        self.critic = nn.Sequential(
-            nn.Linear(obs_dim, 512), nn.Tanh(),
-            nn.Linear(512, 1)
-        )
-    def act(self, obs):
-        return self.gr00t(obs)
-    def value(self, obs):
-        return self.critic(obs)
+# 2. Preprocess Gymnasium observations
+def preprocess_obs(gym_obs, env):
+    rgb = env.render()  # Get RGB image
+    rgb = cv2.resize(rgb, (224, 224))
+    proprio = gym_obs["observation"][:13]
+    instruction = "Pick the object and place it at the target"
+    
+    return {
+        "vision": rgb,
+        "state": proprio,
+        "language": instruction
+    }
 ```
 
 ## PPO Hyperparameters for Large Models
@@ -96,29 +106,29 @@ config = LoraConfig(r=16, lora_alpha=32, target_modules=["q_proj", "v_proj"])
 model = get_peft_model(model, config)
 ```
 
-## Isaac Lab Environments
+## Gymnasium-Robotics Environments
 
 ### Simple (Start Here)
-- `Isaac-Reach-Franka-v0` - Basic reaching
-- `Isaac-Lift-Cube-Franka-v0` - Pick and place
+- `FetchReach-v3` - Basic reaching (sparse/dense reward)
+- `FetchPush-v3` - Push object to target
 
 ### Medium Complexity
-- `Isaac-Stack-Cube-Franka-v0` - Stacking
-- `Isaac-Open-Drawer-Franka-v0` - Interaction
+- `FetchPickAndPlace-v3` - Pick and place object
+- `FetchSlide-v3` - Slide object to target
 
 ### Complex (Later)
-- `Isaac-Humanoid-Direct-v0` - Full humanoid
-- Custom tasks via task config
+- Multi-task training across all Fetch envs
+- Custom reward shaping and curriculum
 
 ## Common Issues & Solutions
 
 | Issue | Solution |
 |-------|----------|
-| OOM with GR00T | Use gradient accumulation, reduce batch size |
-| Action space mismatch | Add adapter layer, check dims |
-| Training unstable | Smaller LR, freeze more layers |
-| Slow training (<1k steps/s) | Profile code, reduce logging |
-| GRPO no improvement | Task might need value function, try PPO |
+| OOM with GR00T | Use gradient accumulation, reduce num_envs, enable LoRA |
+| GR00T not loading | Install Isaac-GR00T package first |
+| Slow inference | Batch observations, use torch.compile |
+| Action space mismatch | Ensure 4D output (dx, dy, dz, gripper) |
+| No RGB images | Set render_mode="rgb_array" in env |
 
 ## Monitoring Metrics
 

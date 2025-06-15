@@ -1492,3 +1492,16 @@ Given that:
 - More data (500 samples) achieves 70.5%
 
 The logical next experiment is to try the **exact 75% recipe with 500 samples** to see if we can push beyond 75% accuracy.
+
+### Currently Running: Optimal Configuration + 500 Samples (2025-06-15)
+
+**Run ID**: TBD (in progress)  
+**Script**: `train_grpo_rich_rewards_500_samples.py`  
+**Session**: `rich_500_optimal`  
+**Configuration**: EXACT same as 75% success, but with 500 unique samples instead of 130
+- Same rich reward schedule: 1.0, 0.7, 0.4, 0.1, -0.2, -0.5
+- Same hyperparameters: batch_size=256, num_generations=16, lr=5e-6, beta=0.1, temp=0.7
+- Same 50 epochs
+- Only change: 500 samples instead of 130
+
+**Hypothesis**: Since the previous 500-sample experiment achieved 70.5% with a slightly different configuration, using the proven optimal configuration should exceed 75% accuracy.

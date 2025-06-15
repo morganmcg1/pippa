@@ -66,9 +66,42 @@ Based on our 75% GRPO success, we'll use:
 ## Experiment Log
 
 ### Setup - 2025-06-15_14:45
-- Created absolute_zero directory structure
-- Initialized research journal
-- Next: Set up virtual environment and base script
+- ✓ Created absolute_zero directory structure
+- ✓ Initialized research journal
+- ✓ Set up virtual environment (az_venv)
+- ✓ Installed dependencies (torch, transformers, trl, etc.)
+- ✓ Created baseline training script (train_absolute_zero_baseline.py)
+- ✓ Updated CLAUDE.md with experiment details
+- ✓ Committed to git
+
+### Implementation Details - 2025-06-15_15:00
+Created `train_absolute_zero_baseline.py` with:
+- **AbsoluteZeroTrainer** class managing proposer and solver models
+- **TRRPlusBaselines** class implementing 6 separate baselines
+- Problem generation using high-temperature sampling (1.0)
+- Learnability reward based on solver improvement
+- Difficulty classification (easy/medium/hard)
+- Integration with GRPO training loop
+- Evaluation on standardized arithmetic dataset
+
+Ready to run first experiment!
+
+### First Experiment Launch - 2025-06-15_19:11 - Run ID: fv3ni9jh
+- **Status**: RUNNING on H100 GPU (cuda)
+- **WandB**: https://wandb.ai/wild-ai/pippa/runs/fv3ni9jh
+- **Configuration**:
+  - 20 iterations total
+  - 100 samples per iteration
+  - Solver: 5 epochs per iteration
+  - Proposer: 3 epochs per iteration
+  - Batch size: 32
+  - Learning rate: 5e-6
+  - Temperature: 0.7 (solver), 1.0 (proposer)
+  - KL penalty: beta=0.1
+- **Running on**: ubuntu@192.222.52.59
+- **tmux session**: absolute_zero
+
+Monitor with: `ssh ubuntu@192.222.52.59 -t 'tmux attach -t absolute_zero'`
 
 ## Key Metrics to Track
 1. **Solver Accuracy**: On standardized eval set

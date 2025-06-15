@@ -1,6 +1,6 @@
 # GR00T RL Integration Roadmap
 
-## Current Status (2025-01-15)
+## Current Status (2025-06-15)
 
 ### ✅ Phase 1: Core PPO Implementation (COMPLETED)
 - Implemented PPO with all 37 details from ICLR blog
@@ -8,31 +8,24 @@
 - Comprehensive logging with WandB
 - Verified implementation correctness
 
-### ✅ Phase 2: Isaac Lab Integration (COMPLETED)
-Based on research findings:
-- No official GR00T+PPO example exists yet
-- Isaac Lab has PPO infrastructure via rsl_rl, rl_games, skrl
-- Need ~200 lines of glue code to connect GR00T to RL runners
+### ✅ Phase 2: Environment Integration (COMPLETED)
+- Switched from Isaac Gym/Lab to Gymnasium-Robotics
+- Successfully integrated with Fetch environments
+- PPO training working with dense/sparse rewards
+- Video logging to WandB tables implemented
+- Tested on GPU machine (192.222.53.15)
 
-Progress:
-- ✅ Created GR00T actor-critic wrapper (algorithms/gr00t_wrapper.py)
-- ✅ Built Isaac Lab training script (scripts/train_isaac_ppo.py)
-- ✅ Added configuration system (configs/isaac_lab_ppo_cfg.py)
-- ✅ Deployed to GPU machine (192.222.53.15)
-- ✅ Installed Isaac Lab and dependencies
-- ✅ Fixed PPO implementation bugs (dimension mismatch issues)
-- ✅ Verified PPO works with basic environments
-- ✅ Created environment wrappers for Isaac Lab compatibility
+### 🚧 Phase 3: GR00T Model Integration (IN PROGRESS)
+- GR00T N1.5 is a 3B parameter vision-language-action model
+- Uses diffusion transformer for action generation
+- Supports new embodiments via EmbodimentTag.NEW_EMBODIMENT
+- Following SO-101 adaptation pattern from HuggingFace blog
 
-### 📋 Phase 3: GR00T Model Integration
-- GR00T uses DiT-based action head (not Gaussian)
-- Need to wrap GR00T policy with critic for actor-critic API
-- Start with frozen backbone, progressively unfreeze
-
-### 🔬 Phase 4: GRPO Experimentation
-- GRPO could work for robotics but has trade-offs
-- Best for verifiable tasks with clear success metrics
-- Leverage Isaac Lab's parallelism for group sampling
+### 📋 Phase 4: Progressive Training Strategy
+- Optional SFT bootstrapping from demonstrations
+- PPO fine-tuning with frozen backbone
+- Progressive unfreezing with LoRA adaptation
+- Memory-efficient training strategies
 
 ## Key Research Findings
 
@@ -54,54 +47,56 @@ Progress:
 
 ### GR00T Integration Steps
 
-1. **Setup Repos:**
+1. **Install GR00T Model:**
    ```bash
+   # Install Isaac-GR00T for model access
    git clone https://github.com/NVIDIA/Isaac-GR00T
-   git clone https://github.com/isaac-sim/IsaacLab
-   git clone https://github.com/leggedrobotics/rsl_rl
+   cd Isaac-GR00T
+   pip install -e .
    ```
 
-2. **Create Actor-Critic Wrapper:**
+2. **Create GR00T RL Policy Wrapper:**
    ```python
-   class Gr00tActorCritic(nn.Module):
-       def __init__(self, gr00t_policy, obs_dim):
-           self.gr00t = gr00t_policy
-           self.critic = nn.Sequential(
-               nn.Linear(obs_dim, 512), nn.Tanh(),
-               nn.Linear(512, 1))
-       def act(self, obs):
-           return self.gr00t(obs)
-       def value(self, obs):
-           return self.critic(obs)
+   class GR00TRLPolicy(nn.Module):
+       def __init__(self, 
+                    model_name_or_path="nvidia/GR00T-N1.5-3B",
+                    action_dim=4,  # Fetch uses 4D actions
+                    proprio_dim=13,  # Fetch observation space
+                    embodiment_tag="new_embodiment"):
+           # Load GR00T with new embodiment head
+           self.gr00t = load_gr00t_model(...)
+           # Add value head for PPO
+           self.value_head = nn.Sequential(...)
    ```
 
-3. **Use Conservative PPO Settings:**
-   - Smaller clip range (0.1)
-   - Fewer epochs (2-3)
-   - KL penalty (beta=0.01)
-   - Freeze backbone initially
+3. **Adapt for Gymnasium-Robotics:**
+   - Preprocess observations (resize images to 224x224)
+   - Extract proprioception from gym observations
+   - Add language instructions
+   - Handle 4D action space (dx, dy, dz, gripper)
 
 4. **Available Environments:**
-   - `Isaac-Humanoid-Direct-v0` (full humanoid)
-   - `Isaac-Stack-Cube-Franka-v0` (manipulation)
-   - `Isaac-Open-Drawer-Franka-v0` (interaction)
+   - `FetchReach-v3` (simple reaching)
+   - `FetchPush-v3` (pushing objects)
+   - `FetchPickAndPlace-v3` (pick and place)
+   - `FetchSlide-v3` (sliding objects)
 
 ## Implementation Strategy
 
 ### Short Term (This Week)
-1. Test our PPO on standard Isaac Lab envs
-2. Study rsl_rl integration patterns
-3. Create minimal GR00T wrapper
+1. ✅ Test PPO on Gymnasium-Robotics Fetch environments
+2. 🚧 Create GR00T policy wrapper with embodiment adaptation
+3. 🚧 Implement observation preprocessing pipeline
 
 ### Medium Term (Next 2 Weeks)
-1. Integrate GR00T backbone with frozen weights
-2. Benchmark PPO performance
-3. Implement GRPO variant for comparison
+1. Integrate GR00T model with frozen weights
+2. Optional: Collect demonstrations for SFT bootstrapping
+3. Benchmark GR00T+PPO performance vs baseline
 
 ### Long Term (Month+)
-1. Progressive unfreezing experiments
-2. Multi-task curriculum learning
-3. Sim-to-real transfer preparation
+1. Progressive unfreezing experiments with LoRA
+2. Multi-task training across Fetch environments
+3. Optimize for inference speed and memory usage
 
 ## Technical Considerations
 
@@ -112,9 +107,9 @@ Progress:
 - Consider LoRA for efficient fine-tuning
 
 ### Training Speed
-- Isaac Lab can run 10kHz+ simulation
-- Target: 10k steps/sec minimum
-- Use vectorized environments (2048+)
+- Gymnasium-Robotics runs at ~1kHz with rendering
+- GR00T inference: ~50Hz (20ms per action)
+- Use vectorized environments (4-16 for memory constraints)
 
 ### Logging
 - Track prompt/instruction used
@@ -133,39 +128,47 @@ When implementing GRPO:
 
 ## Resources
 
-- [Isaac Lab Environments](https://isaac-sim.github.io/IsaacLab/main/source/overview/environments.html)
-- [RSL-RL PPO Config](https://github.com/isaac-sim/IsaacLab/blob/main/source/isaaclab_tasks/isaaclab_tasks/manager_based/locomotion/velocity/config/anymal_b/agents/rsl_rl_ppo_cfg.py)
-- [GR00T Repository](https://github.com/NVIDIA/Isaac-GR00T)
-- [Humanoid-Gym Reference](https://arxiv.org/abs/2404.05695)
+- [GR00T N1.5 Model](https://huggingface.co/nvidia/GR00T-N1.5-3B)
+- [GR00T SO-101 Adaptation Blog](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning)
+- [Isaac-GR00T Repository](https://github.com/NVIDIA/Isaac-GR00T)
+- [Gymnasium-Robotics Docs](https://robotics.farama.org/)
+- [Fetch Environment Details](https://robotics.farama.org/envs/fetch/)
 
 ## Next Steps
 
-1. ✅ Code deployed to GPU machine
-2. ✅ Isaac Lab and rsl_rl cloned
-3. ✅ Isaac Lab dependencies installed
-4. ✅ PPO implementation verified and debugged
-5. 🚧 Test PPO with actual Isaac Lab environments (requires Isaac Sim)
-6. 🚧 Integrate GR00T model as policy network
-7. 📋 Compare PPO vs GRPO performance
+1. ✅ Code deployed to GPU machine (192.222.53.15)
+2. ✅ PPO implementation verified with Gymnasium-Robotics
+3. ✅ WandB video logging working
+4. 🚧 Install Isaac-GR00T package
+5. 🚧 Create GR00T policy wrapper
+6. 🚧 Implement observation preprocessing
+7. 📋 Run GR00T+PPO experiments
 
-## Current Status (2025-06-15)
+## Implementation Details
 
-### Completed Today
-- Installed `uv` package manager on GPU machine
-- Fixed pyproject.toml license configuration (PEP 639)
-- Installed Isaac Lab with all dependencies (~1 hour process)
-- Fixed PPO network dimension mismatch bugs
-- Verified PPO works with WandB tracking
-- Created fallback environment wrappers
+### GR00T Adaptation for Fetch
+- **Action Space**: 4D (dx, dy, dz, gripper)
+- **Observation Space**: 13D proprioception + 224x224 RGB image
+- **Language Instructions**: Task-specific prompts
+- **Embodiment Tag**: "new_embodiment" for Fetch robot
 
-### Active Sessions
-- **GPU machine**: ubuntu@192.222.53.15
-- **tmux sessions**: 
-  - `isaac_setup` - Isaac Lab installation (completed)
-  - `grpo_training` - GRPO experiments
-  - `overfit_exp` - Overfitting experiments
+### Training Configuration
+```yaml
+model:
+  name: "nvidia/GR00T-N1.5-3B"
+  freeze_vision: true
+  freeze_language: true
+  use_lora: true
+  lora_rank: 16
 
-### Known Limitations
-- Isaac Lab requires full Omniverse/Isaac Sim for actual robot environments
-- Current testing uses Gym fallback environments
-- GR00T model integration pending (need to understand action space)
+training:
+  learning_rate: 1e-5
+  batch_size: 4
+  gradient_accumulation: 4
+  num_envs: 4
+
+environment:
+  name: "FetchPickAndPlace-v3"
+  render_size: [224, 224]
+  max_episode_steps: 50
+```

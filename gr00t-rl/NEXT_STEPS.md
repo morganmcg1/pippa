@@ -5,94 +5,99 @@
 ### 1. Environment Setup ✅ (COMPLETED)
 ```bash
 # ✅ Code deployed to GPU machine: ubuntu@192.222.53.15
-# ✅ Repositories cloned:
-#   - ~/isaac-lab (Isaac Lab)
-#   - ~/pippa/rsl_rl
-#   - ~/pippa/gr00t-rl (our implementation)
-# ✅ Isaac Lab installed with all dependencies
-# ✅ PPO implementation tested and working
+# ✅ PPO working with Gymnasium-Robotics
+# ✅ WandB video logging implemented
 
 # To pull latest changes on remote:
 ssh ubuntu@192.222.53.15
 cd ~/pippa
 git pull
 cd gr00t-rl
+source .venv/bin/activate
 ~/.local/bin/uv pip install -e .
 ```
 
-### 2. Test Our PPO Implementation ✅ (COMPLETED)
+### 2. Install GR00T Model Dependencies 🚧
 ```bash
-# ✅ Verified PPO works with basic environments
+# Clone and install Isaac-GR00T
+cd ~/pippa
+git clone https://github.com/NVIDIA/Isaac-GR00T
+cd Isaac-GR00T
+~/.local/bin/uv pip install -e .
+
+# Install additional dependencies
+~/.local/bin/uv pip install transformers diffusers peft
+```
+
+### 3. Create GR00T Policy Wrapper 🚧
+```bash
+# Create the policy wrapper
 cd ~/pippa/gr00t-rl
-~/.local/bin/uv run python scripts/test_ppo_basic_wandb.py
-~/.local/bin/uv run python scripts/test_ppo_debug.py
-~/.local/bin/uv run python scripts/test_isaac_env_simple.py
+touch algorithms/gr00t_rl_policy.py
+touch utils/gr00t_preprocessor.py
 ```
 
-### 3. Next: Full Isaac Sim Setup (Required for Robot Environments)
-```bash
-# Isaac Lab alone is not enough - we need the full Isaac Sim for robot environments
-# Option 1: Install Isaac Sim standalone (recommended for headless)
-cd ~/isaac-lab
-./isaaclab.sh --install-isaaclab # This installs the full simulator
-
-# Option 2: Use Docker container with Isaac Sim
-./isaaclab.sh --docker
-
-# Option 3: Install Omniverse Launcher and Isaac Sim GUI
-# Download from: https://www.nvidia.com/en-us/omniverse/download/
+### 4. Test GR00T Loading
+```python
+# Quick test to ensure GR00T loads
+from transformers import AutoModel
+model = AutoModel.from_pretrained("nvidia/GR00T-N1.5-3B")
+print(f"Model loaded: {model.config}")
 ```
-
-### 4. Study Integration Examples
-- Review `~/isaac-lab/source/isaaclab_tasks/isaaclab_tasks/manager_based/`
-- Understand how rsl_rl expects actor-critic modules
-- Check humanoid environment setup in `classic/humanoid/`
 
 ## This Week's Goals
 
-### 1. Create GR00T Wrapper ✅ (COMPLETED)
+### 1. Create GR00T Wrapper 🚧 (IN PROGRESS)
 ```python
-# gr00t-rl/algorithms/gr00t_wrapper.py
-class GR00TActorCritic(nn.Module):
-    """Wrapper to make GR00T compatible with Isaac Lab RL."""
-    def __init__(self, gr00t_model_path, obs_dim, freeze_backbone=True):
+# gr00t-rl/algorithms/gr00t_rl_policy.py
+class GR00TRLPolicy(nn.Module):
+    """GR00T policy adapted for Gymnasium-Robotics RL."""
+    def __init__(self, 
+                 model_name_or_path="nvidia/GR00T-N1.5-3B",
+                 action_dim=4,  # Fetch: dx, dy, dz, gripper
+                 proprio_dim=13,  # Fetch observation space
+                 device="cuda",
+                 embodiment_tag="new_embodiment",
+                 freeze_vision=True,
+                 freeze_language=True,
+                 add_value_head=True):
         super().__init__()
-        # Load GR00T
-        self.gr00t = Gr00tPolicy.from_pretrained(
-            gr00t_model_path,
-            embodiment_tag="GR1",
-            freeze_backbone=freeze_backbone
+        
+        # Load GR00T with new embodiment
+        self.gr00t = load_gr00t_model(
+            model_name_or_path,
+            embodiment_tag=embodiment_tag,
+            action_dim=action_dim,
+            proprio_dim=proprio_dim
         )
         
-        # Add lightweight critic
-        self.critic = nn.Sequential(
-            nn.Linear(obs_dim, 512),
-            nn.Tanh(),
-            nn.Linear(512, 256),
-            nn.Tanh(),
-            nn.Linear(256, 1)
-        )
-        
-    def act(self, observations):
-        """Get actions from GR00T policy."""
-        return self.gr00t(observations)
-        
-    def evaluate(self, observations):
-        """Get values from critic."""
-        return self.critic(observations)
+        # Freeze components as specified
+        if freeze_vision:
+            freeze_module(self.gr00t.vision_encoder)
+        if freeze_language:
+            freeze_module(self.gr00t.language_encoder)
+            
+        # Add value head for PPO
+        if add_value_head:
+            hidden_dim = self.gr00t.config.hidden_size
+            self.value_head = nn.Sequential(
+                nn.Linear(hidden_dim, 512),
+                nn.ReLU(),
+                nn.Linear(512, 1)
+            )
 ```
 
 ### 2. Integration Test (1-2 days)
-- Start with `Isaac-Reach-Franka-v0` (simple task)
+- Start with `FetchReach-v3` (simple task)
 - Verify GR00T forward pass works
-- Check action space compatibility
-- Monitor memory usage
+- Check 4D action space compatibility
+- Monitor memory usage with 3B model
 
 ### 3. Baseline Experiments (2-3 days)
 Run PPO with:
-1. Default Isaac Lab policy (baseline)
-2. Our PPO + small network
-3. Our PPO + GR00T (frozen)
+1. Current PPO + MLP policy (baseline)
+2. GR00T + frozen backbone
+3. GR00T + LoRA adaptation
 
 ## Next Week's Goals
 
@@ -116,30 +121,29 @@ Identify GRPO-friendly tasks:
 
 ## Key Experiments to Run
 
-### Experiment 1: Scaling Test
+### Experiment 1: Memory & Speed Test
 ```bash
-# Test how performance scales with parallel envs
-for num_envs in 1 4 16 64 256:
-    python train_ppo_v2.py --env Isaac-Reach-Franka-v0 --num-envs $num_envs
+# Test GR00T memory usage and inference speed
+python scripts/test_gr00t_memory.py --num-envs 1 2 4 8
 ```
 
-### Experiment 2: Frozen vs Unfrozen
+### Experiment 2: Freezing Strategies
 ```python
 # Compare different freezing strategies
 configs = [
-    {"freeze_backbone": True, "freeze_action_head": False},
-    {"freeze_backbone": False, "train_lora_only": True},
-    {"freeze_backbone": False, "freeze_action_head": False}
+    {"freeze_vision": True, "freeze_language": True},  # Most memory efficient
+    {"freeze_vision": False, "use_lora": True, "lora_rank": 16},
+    {"freeze_vision": False, "freeze_language": False}  # Full fine-tuning
 ]
 ```
 
-### Experiment 3: GRPO Ablations
+### Experiment 3: SFT vs Direct RL
 ```python
-# Test GRPO hyperparameters
-grpo_configs = [
-    {"num_rollouts": 4, "normalize_advantages": True},
-    {"num_rollouts": 8, "normalize_advantages": True},
-    {"num_rollouts": 16, "normalize_advantages": False}
+# Compare training approaches
+approaches = [
+    {"method": "direct_rl", "init": "random"},
+    {"method": "direct_rl", "init": "pretrained"},
+    {"method": "sft_then_rl", "sft_epochs": 20}
 ]
 ```
 
@@ -147,11 +151,11 @@ grpo_configs = [
 
 ### Week 1 Success:
 - [x] PPO training runs without crashes ✅
-- [x] GR00T wrapper integrated (gr00t_wrapper.py created) ✅
-- [x] Training script ready (train_isaac_ppo.py) ✅
-- [x] Environment adapters created (isaac_gym_wrapper.py) ✅
-- [ ] Baseline performance recorded (pending Isaac Sim)
-- [x] Memory usage acceptable (<1GB for basic tests) ✅
+- [x] Gymnasium-Robotics integration complete ✅
+- [x] WandB video logging working ✅
+- [ ] GR00T wrapper created (in progress)
+- [ ] GR00T model loads successfully
+- [ ] Memory usage acceptable (<40GB for 3B model)
 
 ### Week 2 Success:
 - [ ] GRPO implemented and tested

@@ -2,6 +2,14 @@
 
 This file contains important instructions and learnings for Claude when working on this project.
 
+## File Management
+
+### Edit Existing Files Instead of Creating New Ones
+- **ALWAYS prefer editing existing files** rather than creating new files for small changes
+- Only create new files when there are major changes or truly new functionality
+- This keeps the codebase cleaner and makes it easier to track changes
+- Example: If modifying a training script with a few parameter changes, edit the existing script rather than creating a new variant
+
 ## Dependency Management
 
 ### Use `uv` and `pyproject.toml`

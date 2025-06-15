@@ -1,23 +1,27 @@
 # GR00T RL Project Summary
 
 ## Project Goal
-Implement RL fine-tuning (PPO and GRPO) for NVIDIA's GR00T 1.5 robotic foundation model.
+Implement RL fine-tuning (PPO and GRPO) for NVIDIA's GR00T N1.5 robotic foundation model with Gymnasium-Robotics environments.
 
 ## Current Status
 - ✅ **Phase 1 Complete**: State-of-the-art PPO implementation with all 37 details
-- 🚧 **Phase 2 In Progress**: Isaac Lab integration
-  - ✅ Created GR00T actor-critic wrapper
-  - ✅ Built training script for Isaac Lab connection
-  - ✅ Test integration script ready
-  - 🚧 Isaac Lab installation in progress on GPU machine
+- ✅ **Phase 2 Complete**: Environment integration with Gymnasium-Robotics
+  - ✅ PPO working with Fetch environments
+  - ✅ WandB video logging implemented
+  - ✅ Debug mode for rapid testing
+- 🚧 **Phase 3 In Progress**: GR00T model integration
+  - 🚧 Creating GR00T policy wrapper
+  - 🚧 Implementing observation preprocessing
+  - 📋 Following SO-101 adaptation pattern
 - 📋 **Research Complete**: Comprehensive analysis of GRPO for robotics
 
 ## Key Findings
 
-### 1. No Official GR00T+RL Example
-- GR00T repo only supports imitation learning currently
-- Isaac Lab has RL infrastructure but no GR00T integration
-- We need to build the bridge ourselves (~200 lines)
+### 1. GR00T Model Architecture
+- 3B parameter vision-language-action model
+- Uses diffusion transformer for action generation
+- Supports new embodiments via EmbodimentTag.NEW_EMBODIMENT
+- SO-101 blog shows successful adaptation pattern
 
 ### 2. GRPO Analysis for Robotics
 **Pros:**
@@ -34,46 +38,58 @@ Implement RL fine-tuning (PPO and GRPO) for NVIDIA's GR00T 1.5 robotic foundatio
 **Recommendation:** Use PPO as baseline, experiment with GRPO for specific tasks
 
 ### 3. Integration Strategy
-1. Wrap GR00T in actor-critic interface
-2. Start with frozen backbone
-3. Use conservative hyperparameters
-4. Test on simple tasks first
+1. Create GR00T policy wrapper with new embodiment head
+2. Preprocess Gymnasium observations (resize images, extract proprio)
+3. Optional: SFT bootstrapping from demonstrations
+4. PPO fine-tuning with frozen vision/language encoders
+5. Progressive unfreezing with LoRA for efficiency
 
 ## Implementation Plan
 
 ### This Week
 - [x] Code deployed to GPU machine (192.222.53.15)
-- [x] Isaac Lab and rsl_rl cloned
-- [ ] Install Isaac Lab environment (in progress)
-- [x] Create GR00T wrapper (completed)
+- [x] PPO working with Gymnasium-Robotics
+- [x] WandB video logging implemented
+- [ ] Install Isaac-GR00T package
+- [ ] Create GR00T policy wrapper
 - [ ] Run first integration test
 
 ### Next Week
-- [ ] Implement GRPO variant
-- [ ] Benchmark PPO vs GRPO
-- [ ] Select best approach
+- [ ] Optional: Collect demonstrations for SFT
+- [ ] Benchmark GR00T+PPO performance
+- [ ] Experiment with LoRA configurations
 
 ### This Month
 - [ ] Progressive unfreezing experiments
-- [ ] Multi-task curriculum
-- [ ] Performance optimization
+- [ ] Multi-task training (Reach, Push, Pick&Place)
+- [ ] Memory and speed optimization
 
 ## Technical Architecture
 ```
+Gymnasium-Robotics Env
+    ↓
+Observation Preprocessing
+    - RGB image → 224x224
+    - Proprioception → 13D vector
+    - Language instruction
+    ↓
 GR00T Model (3B params)
+    - Vision encoder (frozen)
+    - Language encoder (frozen)  
+    - New embodiment head (trainable)
     ↓
-Actor-Critic Wrapper
+PPO Algorithm
+    - Action head → 4D continuous
+    - Value head → scalar
     ↓
-Isaac Lab RL Runner (rsl_rl)
-    ↓
-Parallel Simulations (2048+ envs)
+Parallel Environments (4-16)
 ```
 
 ## Success Metrics
-- Training stability with large model
-- >10k steps/sec throughput
-- Successful task completion
-- Memory usage <40GB
+- Training stability with 3B parameter model
+- >1k environment steps/sec
+- >50% success rate on FetchPickAndPlace-v3
+- Memory usage <40GB on H100
 
 ## Resources
 - Code: `/Users/morganmcguire/ML/robotty/gr00t-rl/`
@@ -81,9 +97,10 @@ Parallel Simulations (2048+ envs)
 - Research: `research_journal/grpo_robotics_analysis.md`
 
 ## Next Actions
-1. Complete Isaac Lab installation: `cd IsaacLab && ./isaaclab.sh --install`
-2. Run integration test: `cd gr00t-rl && uv run python scripts/test_isaac_integration.py`
-3. Test PPO on simple Isaac Lab environment
+1. Install Isaac-GR00T: `cd ~/pippa && git clone https://github.com/NVIDIA/Isaac-GR00T`
+2. Create GR00T policy wrapper: `gr00t-rl/algorithms/gr00t_rl_policy.py`
+3. Test GR00T loading and inference speed
+4. Run PPO+GR00T on FetchReach-v3
 
 ## GPU Machine Access
 - SSH: `ssh ubuntu@192.222.53.15`
