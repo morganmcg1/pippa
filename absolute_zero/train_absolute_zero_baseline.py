@@ -438,12 +438,15 @@ def main():
         print(f"\\nTraining solver for {solver_epochs_per_iteration} epochs...")
         
         # Define solver reward function
-        def solver_reward_function(samples: List[str], prompts: List[str], **kwargs) -> List[float]:
+        def solver_reward_function(completions: List[str], prompts: List[str] = None, **kwargs) -> List[float]:
             rewards = []
             batch_indices = kwargs.get('batch_indices', [])
             
-            for i, (sample, prompt) in enumerate(zip(samples, prompts)):
-                extracted = extract_answer(sample, prompt)
+            if prompts is None:
+                prompts = kwargs.get('prompt', [])
+            
+            for i, (completion, prompt) in enumerate(zip(completions, prompts)):
+                extracted = extract_answer(completion, prompt)
                 
                 # Get the correct answer from dataset
                 if batch_indices:
@@ -537,13 +540,13 @@ def main():
             print(f"\\nTraining proposer for {proposer_epochs_per_iteration} epochs...")
             
             # Define proposer reward function based on learnability
-            def proposer_reward_function(samples: List[str], prompts: List[str], **kwargs) -> List[float]:
+            def proposer_reward_function(completions: List[str], prompts: List[str] = None, **kwargs) -> List[float]:
                 # For proposer, the reward is based on learnability
                 # This is simplified - in practice, we'd track which problems helped solver improve
                 rewards = []
                 batch_indices = kwargs.get('batch_indices', [])
                 
-                for i in range(len(samples)):
+                for i in range(len(completions)):
                     if batch_indices:
                         reward = proposer_dataset[batch_indices[i]]['learnability_reward']
                     else:
