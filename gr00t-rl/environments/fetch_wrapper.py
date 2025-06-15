@@ -129,7 +129,13 @@ class FetchGoalWrapper(gym.Wrapper):
     ) -> float:
         """Compute reward based on reward mode."""
         # Use environment's compute_reward for sparse reward
-        sparse_reward = self.env.compute_reward(achieved_goal, desired_goal, info)
+        unwrapped_env = self.env.unwrapped if hasattr(self.env, 'unwrapped') else self.env
+        if hasattr(unwrapped_env, 'compute_reward'):
+            sparse_reward = unwrapped_env.compute_reward(achieved_goal, desired_goal, info)
+        else:
+            # Fallback to simple distance-based reward
+            distance = np.linalg.norm(achieved_goal - desired_goal)
+            sparse_reward = float(distance < 0.05)
         
         if self.reward_mode == "sparse":
             return sparse_reward
@@ -186,11 +192,17 @@ class FetchGoalWrapper(gym.Wrapper):
         info['distance_to_goal'] = np.linalg.norm(
             obs_dict['achieved_goal'] - obs_dict['desired_goal']
         )
-        info['sparse_reward'] = self.env.compute_reward(
-            obs_dict['achieved_goal'],
-            obs_dict['desired_goal'],
-            info
-        )
+        # Access the unwrapped environment which has compute_reward
+        unwrapped_env = self.env.unwrapped if hasattr(self.env, 'unwrapped') else self.env
+        if hasattr(unwrapped_env, 'compute_reward'):
+            info['sparse_reward'] = unwrapped_env.compute_reward(
+                obs_dict['achieved_goal'],
+                obs_dict['desired_goal'],
+                info
+            )
+        else:
+            # Fallback to simple distance-based reward
+            info['sparse_reward'] = float(info['distance_to_goal'] < 0.05)
         
         return obs, reward, terminated, truncated, info
     
