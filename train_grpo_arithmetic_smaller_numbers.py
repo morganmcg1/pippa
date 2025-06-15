@@ -6,7 +6,6 @@ Hypothesis: Smaller number range will be easier to learn and achieve higher accu
 """
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import Dataset
 from trl import GRPOConfig, GRPOTrainer
 import random
@@ -160,14 +159,7 @@ def main():
         }
     )
     
-    print("Loading model and tokenizer...")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.bfloat16,
-        device_map="auto"
-    )
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.pad_token_id = tokenizer.eos_token_id
+    print("Preparing training configuration..."
     
     print(f"Creating dataset with numbers 0-{max_num}...")
     dataset = create_small_arithmetic_dataset(n_samples, max_num)
@@ -243,11 +235,10 @@ def main():
     
     # Initialize trainer
     trainer = GRPOTrainerFixed(
-        model=model,
-        tokenizer=tokenizer,
+        model=model_name,
         args=config,
         train_dataset=dataset,
-        reward_function=reward_wrapper,
+        reward_funcs=[reward_wrapper],
     )
     
     print("\nStarting training with smaller numbers...")
@@ -263,6 +254,10 @@ def main():
     # Track errors by operation type
     errors_by_op = {'+': 0, '-': 0, '*': 0}
     total_by_op = {'+': 0, '-': 0, '*': 0}
+    
+    # Get model and tokenizer from trainer
+    model = trainer.model
+    tokenizer = trainer.tokenizer
     
     model.eval()
     with torch.no_grad():

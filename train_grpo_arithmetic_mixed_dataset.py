@@ -6,7 +6,6 @@ The model might learn better from a mix of task difficulties
 """
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 from datasets import Dataset
 from trl import GRPOConfig, GRPOTrainer
 import random
@@ -198,14 +197,7 @@ def main():
         }
     )
     
-    print("Loading model and tokenizer...")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.bfloat16,
-        device_map="auto"
-    )
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.pad_token_id = tokenizer.eos_token_id
+    print("Preparing training configuration..."
     
     print("Creating mixed dataset...")
     dataset = create_mixed_dataset(n_samples)
@@ -272,11 +264,10 @@ def main():
     
     # Initialize trainer
     trainer = GRPOTrainerFixed(
-        model=model,
-        tokenizer=tokenizer,
+        model=model_name,
         args=config,
         train_dataset=dataset,
-        reward_function=reward_wrapper,
+        reward_funcs=[reward_wrapper],
     )
     
     print("\nStarting training with mixed dataset...")
@@ -286,6 +277,10 @@ def main():
     # Evaluate final performance by task type
     print("\nEvaluating final model...")
     results_by_type = {}
+    
+    # Get model and tokenizer from trainer
+    model = trainer.model
+    tokenizer = trainer.tokenizer
     
     model.eval()
     with torch.no_grad():
