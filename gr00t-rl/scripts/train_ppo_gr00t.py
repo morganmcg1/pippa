@@ -59,10 +59,10 @@ def make_fetch_env(env_id: str, idx: int, capture_video: bool, run_name: str,
         )
         
         if capture_video and idx == 0:
-            # Record every 5 episodes for better visibility
+            # Record every episode for debugging (change back to % 5 for production)
             env = gym.wrappers.RecordVideo(
                 env, f"videos/{run_name}",
-                episode_trigger=lambda episode_id: episode_id % 5 == 0,
+                episode_trigger=lambda episode_id: True,  # Record every episode
                 name_prefix=f"episode",
                 disable_logger=True
             )
@@ -248,6 +248,8 @@ def train(args):
                             "actual_episode": episode_count
                         }
                         env0_episode_count += 1
+                        if env0_episode_count % 10 == 0:
+                            print(f"    Env 0 completed episode {env0_episode_count}")
                     
                     # Log individual episode
                     writer.add_scalar("charts/episodic_return", episode_data["episode_return"], global_step)
