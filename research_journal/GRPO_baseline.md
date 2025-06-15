@@ -1080,10 +1080,12 @@ These experiments will complete but without intermediate evaluation data. Final 
    - Starting with easy problems (0-5 addition only) didn't help generalization
    - Performance degraded compared to mixed training
 
-3. **small_numbers_enhanced** - Run ID: 1747qx62 🏃
-   - **Still running**: 59.3 epochs, 93.1% training reward (highest!)
-   - Using 32 generations, priming examples, adaptive LR
-   - Will update when complete
+3. **small_numbers_enhanced** - Run ID: 1747qx62 ❌
+   - **Training**: 80 epochs, 88.7% training reward
+   - **Standardized eval: 16.5%** (33/200 correct) - CATASTROPHIC!
+   - Worst result yet, severe overfitting
+   - Despite priming examples and 32 generations
+   - High training reward but complete failure to generalize
 
 ### Key Learnings
 
@@ -1092,12 +1094,26 @@ These experiments will complete but without intermediate evaluation data. Final 
 3. **High training reward ≠ good generalization**: All experiments reached 85%+ training reward
 4. **Periodic evaluation not logged**: Due to GRPOTrainer callback issues, no intermediate evaluations were captured
 
-### Next Steps
+### Analysis Summary
 
-1. Wait for `small_numbers_enhanced` to complete
-2. Launch new experiments with fixed periodic evaluation (`train_grpo_manual_eval.py`)
-3. Try these approaches:
-   - **Ultra-high generations**: 64 generations for maximum diversity
-   - **Weighted sampling**: Oversample harder problems during training
-   - **Multi-stage training**: Train on easy first, then fine-tune on full dataset
-   - **Different model sizes**: Try Qwen2-1.5B for more capacity
+- **Best approach remains smaller numbers (0-10)**: 42-45.5% standardized eval
+- **More training hurts**: Enhanced (80 epochs) got 16.5% vs periodic eval (75 epochs) got 42%
+- **Curriculum learning fails**: Progressive difficulty achieved only 26.5%
+- **Extreme overfitting problem**: All models reach 85%+ training reward but generalize poorly
+
+### Currently Running Experiments (2025-06-15_07:05 UTC)
+
+1. **ultra_diversity** - 64 generations per prompt for maximum variance
+   - Early results: 91.8% training reward at epoch 2.1
+   - Will evaluate if extreme diversity helps generalization
+
+2. **weighted_sampling** - Oversample multiplication/subtraction
+   - At epoch 56.7, 77.3% training reward
+   - Addressing specific operation weaknesses
+
+### Next Hypotheses
+
+1. **Early stopping is critical**: Best performance likely occurs before epoch 30
+2. **Model capacity**: Current 0.5B model may be too small for robust arithmetic
+3. **Dataset size**: 100-150 samples may be insufficient for generalization
+4. **Reward shaping**: Binary rewards may be too sparse - consider partial credit

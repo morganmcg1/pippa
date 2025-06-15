@@ -225,9 +225,12 @@ def train(args):
                     
                     # Track this episode for video checking
                     if idx == 0:  # Only env 0 records videos
-                        video_episode_tracker[episode_count] = {
+                        # Track episodes for env 0 specifically
+                        env0_episode_num = episode_count // args.num_envs  # Approximate episode number for env 0
+                        video_episode_tracker[env0_episode_num] = {
                             "global_step": global_step,
-                            "episode_data": episode_data
+                            "episode_data": episode_data,
+                            "actual_episode": episode_count
                         }
                     
                     # Log individual episode to tensorboard
@@ -250,9 +253,15 @@ def train(args):
                 video_files = sorted(video_dir.glob("*.mp4"))
                 
                 for video_file in video_files:
-                    # Extract episode number from filename (e.g., "episode-10.mp4" -> 10)
+                    # Extract episode number from filename (e.g., "episode-10.mp4" or "episode-episode-0.mp4" -> 0)
                     try:
-                        episode_num = int(video_file.stem.split('-')[-1])
+                        # Handle both "episode-0" and "episode-episode-0" formats
+                        parts = video_file.stem.split('-')
+                        episode_num = int(parts[-1])
+                        
+                        # Debug logging
+                        print(f"Found video file: {video_file.name}, extracted episode: {episode_num}")
+                        print(f"Video tracker keys: {list(video_episode_tracker.keys())}")
                         
                         # Check if we have data for this episode and haven't logged it yet
                         if episode_num in video_episode_tracker and not video_episode_tracker[episode_num].get("logged", False):
