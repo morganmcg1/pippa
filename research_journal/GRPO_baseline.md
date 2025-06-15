@@ -893,3 +893,57 @@ class GRPOTrainerFixed(GRPOTrainer):
 - Simple text-based printing works as a replacement
 - Capture completions in _generate_completions() override
 - This enables seeing what the model actually generates during training
+
+## All Training Scripts Updated with Standardized Evaluation (2025-06-15)
+
+### Implementation Complete
+- **21 GRPO training scripts** have been updated with standardized evaluation
+- All scripts now evaluate on `morgan/arithmetic_eval` dataset after training
+- New metric name: `arithmetic_eval` (replacing `final_accuracy`)
+- Backups created for all modified scripts (*.backup files)
+
+### Scripts Updated:
+- All `train_grpo_arithmetic_*.py` scripts
+- Core scripts like `train_grpo.py`, `train_grpo_verifiable.py`
+- Recent experiments including ultra-diversity scripts
+- Templates preserved: `train_grpo_with_standard_eval.py` remains the reference
+
+### Key Addition to All Scripts:
+```python
+def evaluate_on_standard_dataset(model, tokenizer, device) -> Dict[str, float]:
+    """Evaluate on morgan/arithmetic_eval dataset (200 standardized problems)"""
+    # ... evaluation implementation ...
+    return {
+        'arithmetic_eval': overall_accuracy,  # Primary metric
+        'arithmetic_eval_correct': correct_total,
+        'arithmetic_eval_total': 200,
+        # ... difficulty and operation breakdowns ...
+    }
+```
+
+### Updated Experiment Results with Standardized Evaluation
+
+#### Latest Completed Runs (All evaluated on different test sets - need re-evaluation!)
+
+1. **Ultra-Diversity 64 Generations** - Run ID: icel5tvz
+   - Training reward: 76.9%
+   - Final accuracy: 50.0% (on its own mixed test set)
+   - Extended training proposed due to strong reward curve
+
+2. **Mixed Small Numbers** - Run ID: s8snd2a0 - **HIGHEST REPORTED** 
+   - Training reward: 73.3%  
+   - Final accuracy: 60.7% (on 0-10 number test set - EASIER!)
+   - Achieved breakthrough but on easier evaluation
+
+3. **Extended Training** - Run ID: js57wrfi
+   - Training reward: 61.7%
+   - Final accuracy: 46.7% (on mixed 0-20 test set)
+   - Improvement from 37.3% to 46.7% with extended epochs
+
+### Critical Next Step: Re-evaluate All Models
+Since all experiments used different evaluation datasets:
+- 60.7% was on 0-10 problems (easiest)
+- 54.7% was on 0-20 problems (harder)
+- All numbers are incomparable!
+
+Need to run `reevaluate_available_models.py` to get true `arithmetic_eval` scores on the standardized 200-problem dataset.
