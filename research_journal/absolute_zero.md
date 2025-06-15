@@ -130,6 +130,32 @@ Ready to run first experiment!
 - May need gradient checkpointing
 - Consider sharing base model weights
 
+### Qwen2-0.5B Usage Notes (from HuggingFace docs)
+**Key insights for proper inference:**
+1. **Model Loading**:
+   ```python
+   from transformers import AutoTokenizer, AutoModelForCausalLM
+   tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+   model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-0.5B-Instruct")
+   ```
+
+2. **Proper Generation Parameters**:
+   - Use `do_sample=True` for diverse outputs
+   - Temperature controls randomness (higher = more diverse)
+   - `top_k` and `top_p` for nucleus sampling
+   - Set proper `pad_token_id` to avoid warnings
+
+3. **For Arithmetic Problem Generation**:
+   - Clear, specific prompts work better
+   - The model understands instruction-following
+   - May need few-shot examples in prompt
+
+4. **Tokenizer Setup**:
+   ```python
+   if tokenizer.pad_token is None:
+       tokenizer.pad_token = tokenizer.eos_token
+   ```
+
 ### Evaluation Protocol
 1. **Solver Evaluation**: Standard morgan/arithmetic_eval dataset
 2. **Proposer Evaluation**: Quality and diversity of generated problems

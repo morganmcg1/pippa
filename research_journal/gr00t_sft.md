@@ -145,6 +145,34 @@ save_steps = 50
 - Model learns to reproduce demonstration actions
 - No initialization errors
 
+### 3. Successful Overfitting Run - 2025-06-15_20:18
+**Run ID**: g345i5zc (gr00t-sft-500samples-20250615_201813)
+**Status**: ✅ RUNNING SUCCESSFULLY
+
+**Configuration**:
+- Batch size: 64 (optimal for H100)
+- Learning rate: 1e-4
+- Max steps: 500
+- Dataset samples: 500
+- Tags: overfitting-batch64
+
+**Results**:
+- **Step 10**: Loss 0.5868 (starting point)
+- **Step 60**: Loss 0.1254 (78% reduction!)
+- **Memory usage**: 41.8GB (51% of H100)
+- **Training speed**: ~1.15s/iteration
+
+**Key Success Factors**:
+1. Clean GPU before starting
+2. High batch size (64) for efficient training
+3. Standard learning rate (1e-4) works perfectly
+4. Proper WandB artifact saving implemented
+
+**Next Steps**:
+- Monitor until loss < 0.01
+- Verify saved artifacts include all required components
+- Test loading the saved model for inference
+
 ## Technical Notes
 
 ### Memory Considerations

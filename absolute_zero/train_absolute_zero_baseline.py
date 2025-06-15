@@ -176,13 +176,13 @@ class AbsoluteZeroTrainer:
         problems = []
         raw_generations = []  # Track all raw outputs for debugging
         
-        # Prompt engineering for problem generation
+        # Prompt engineering for problem generation with few-shot examples
         base_prompts = [
-            "Generate a simple arithmetic problem in the format 'Calculate: X + Y = ': ",
-            "Create a math problem with addition or subtraction in the format 'Calculate: X - Y = ': ",
-            "Write an arithmetic problem with multiplication in the format 'Calculate: X * Y = ': ",
-            "Create a challenging arithmetic problem in the format 'Calculate: X op Y = ' where op is +, -, or *: ",
-            "Calculate: ",  # Simple prompt that might work better
+            "Generate arithmetic: Calculate: 5 + 3 = \nGenerate arithmetic: Calculate: 12 - 7 = \nGenerate arithmetic: ",
+            "Problem: Calculate: 8 + 4 = \nProblem: Calculate: 15 - 6 = \nProblem: ",
+            "Create: Calculate: 3 * 4 = \nCreate: Calculate: 7 * 2 = \nCreate: ",
+            "Example: Calculate: 9 + 2 = \nExample: Calculate: 6 * 3 = \nExample: ",
+            "Calculate: 4 + 5 = \nCalculate: 11 - 3 = \nCalculate: ",
         ]
         
         self.proposer_model.eval()
@@ -213,9 +213,12 @@ class AbsoluteZeroTrainer:
             })
             
             # Parse the generated problem
-            # Expected format: "Calculate: X op Y = "
-            if "Calculate:" in problem_text:
-                parsed_problem = problem_text.split('=')[0].strip() + ' = '
+            # First, try to find "Calculate: X op Y = " pattern
+            calculate_match = re.search(r'Calculate:\s*(\d+)\s*([+\-*])\s*(\d+)\s*=', problem_text)
+            if calculate_match:
+                parsed_problem = calculate_match.group(0).strip()
+                if not parsed_problem.endswith(' = '):
+                    parsed_problem = parsed_problem.rstrip('=').strip() + ' = '
                 problems.append({
                     'prompt': parsed_problem,
                     'source': 'proposer',
@@ -224,8 +227,8 @@ class AbsoluteZeroTrainer:
                 raw_generations[-1]['parsed'] = True
                 raw_generations[-1]['final_problem'] = parsed_problem
             else:
-                # Try to extract a valid problem
-                match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', problem_text)
+                # Try simpler pattern without "Calculate:"
+                match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)\s*=', problem_text)
                 if match:
                     a, op, b = match.groups()
                     parsed_problem = f"Calculate: {a} {op} {b} = "
@@ -236,6 +239,19 @@ class AbsoluteZeroTrainer:
                     })
                     raw_generations[-1]['parsed'] = True
                     raw_generations[-1]['final_problem'] = parsed_problem
+                else:
+                    # Last resort: look for any arithmetic pattern
+                    fallback_match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', problem_text)
+                    if fallback_match:
+                        a, op, b = fallback_match.groups()
+                        parsed_problem = f"Calculate: {a} {op} {b} = "
+                        problems.append({
+                            'prompt': parsed_problem,
+                            'source': 'proposer',
+                            'raw': problem_text
+                        })
+                        raw_generations[-1]['parsed'] = True
+                        raw_generations[-1]['final_problem'] = parsed_problem
         
         # Print debug info
         parsed_count = sum(1 for g in raw_generations if g['parsed'])
@@ -406,13 +422,13 @@ class AbsoluteZeroTrainer:
         proposer_prompts = []
         proposer_completions = []
         
-        # Use the same prompts we used for generation
+        # Use the same few-shot prompts we used for generation
         generation_prompts = [
-            "Generate a simple arithmetic problem in the format 'Calculate: X + Y = ': ",
-            "Create a math problem with addition or subtraction in the format 'Calculate: X - Y = ': ",
-            "Write an arithmetic problem with multiplication in the format 'Calculate: X * Y = ': ",
-            "Create a challenging arithmetic problem in the format 'Calculate: X op Y = ' where op is +, -, or *: ",
-            "Calculate: ",
+            "Generate arithmetic: Calculate: 5 + 3 = \nGenerate arithmetic: Calculate: 12 - 7 = \nGenerate arithmetic: ",
+            "Problem: Calculate: 8 + 4 = \nProblem: Calculate: 15 - 6 = \nProblem: ",
+            "Create: Calculate: 3 * 4 = \nCreate: Calculate: 7 * 2 = \nCreate: ",
+            "Example: Calculate: 9 + 2 = \nExample: Calculate: 6 * 3 = \nExample: ",
+            "Calculate: 4 + 5 = \nCalculate: 11 - 3 = \nCalculate: ",
         ]
         
         # Create training data where the proposer learns to complete prompts with good problems
