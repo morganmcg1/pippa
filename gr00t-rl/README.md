@@ -98,24 +98,90 @@ python scripts/train_grpo.py
 
 ## Installation
 
-```bash
-# Clone Isaac-GR00T if not already done
-git clone https://github.com/NVIDIA/Isaac-GR00T
+### Prerequisites
+- Ubuntu 20.04 or 22.04
+- CUDA 12.1 or later
+- Python 3.10
+- `uv` package manager installed (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
-# Create virtual environment
-cd gr00t-rl
+### Step 1: Clone and Setup gr00t-rl
+```bash
+# Clone the repository
+git clone https://github.com/morganmcg1/pippa.git
+cd pippa/gr00t-rl
+
+# Create virtual environment with uv
 uv venv
 source .venv/bin/activate
 
-# Install dependencies
-cd ../gr00t-tuning/Isaac-GR00T
-uv pip install -e ".[base]"
-uv pip install --no-build-isolation flash-attn==2.7.1.post4
-
-# Install RL dependencies
-uv pip install gymnasium stable-baselines3 wandb python-dotenv
-uv pip install torch torchvision  # If not already installed
+# Install gr00t-rl package and dependencies
+uv pip install -e .
 ```
+
+### Step 2: Install Isaac Lab (Full Installation)
+```bash
+# Clone Isaac Lab repository
+cd ~
+git clone https://github.com/isaac-sim/IsaacLab.git isaac-lab
+cd isaac-lab
+
+# Create Isaac Lab virtual environment
+python -m venv isaaclab_env
+source isaaclab_env/bin/activate
+
+# Upgrade pip
+pip install --upgrade pip
+
+# Install Isaac Sim pip packages (this takes ~30-60 minutes)
+pip install isaacsim-rl isaacsim-replicator isaacsim-extscache-physics isaacsim-extscache-kit isaacsim-extscache-kit-sdk
+
+# Run Isaac Lab installer
+./isaaclab.sh --install
+
+# When prompted, accept the NVIDIA Omniverse License Agreement (EULA) by typing "Yes"
+```
+
+### Step 3: Setup Environment Variables
+```bash
+# Add to your ~/.bashrc or create a setup script
+export ISAAC_LAB_PATH=~/isaac-lab
+export PYTHONPATH=$ISAAC_LAB_PATH/source:$PYTHONPATH
+
+# For GPU machines, ensure CUDA is available
+export PATH=$HOME/.local/bin:$PATH
+export HF_HOME=/home/ubuntu/.cache/huggingface  # For model caching
+```
+
+### Step 4: Verify Installation
+```bash
+# Activate gr00t-rl environment
+cd ~/pippa/gr00t-rl
+source .venv/bin/activate
+
+# Test basic PPO implementation
+uv run python scripts/test_ppo_basic_wandb.py
+
+# Test Isaac Lab imports (requires Isaac Lab env)
+cd ~/isaac-lab
+source isaaclab_env/bin/activate
+./isaaclab.sh --python ~/pippa/gr00t-rl/scripts/test_isaac_lab_import.py
+```
+
+### Common Issues and Solutions
+
+#### License Classifier Error
+If you see `setuptools.errors.InvalidConfigError: License classifiers have been superseded`:
+- Update pyproject.toml to use `license = {text = "MIT"}` instead of the classifier
+
+#### GPU Memory Issues
+- Use gradient accumulation for large batch sizes
+- Reduce `num_envs` if running out of memory
+- Monitor with `nvidia-smi`
+
+#### Isaac Lab Import Errors
+- Isaac Lab requires the full Omniverse stack
+- For headless training, you may need additional setup
+- Consider using our fallback Gym wrapper for testing
 
 ## Tasks
 
