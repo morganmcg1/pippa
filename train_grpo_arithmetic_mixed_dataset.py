@@ -197,7 +197,7 @@ def main():
         }
     )
     
-    print("Preparing training configuration..."
+    print("Preparing training configuration...")
     
     print("Creating mixed dataset...")
     dataset = create_mixed_dataset(n_samples)

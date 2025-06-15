@@ -148,7 +148,7 @@ def main():
         }
     )
     
-    print("Preparing training configuration..."
+    print("Preparing training configuration...")
     
     print("Creating dataset...")
     dataset = create_simple_arithmetic_dataset(n_samples)

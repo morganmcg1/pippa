@@ -159,7 +159,7 @@ def main():
         }
     )
     
-    print("Preparing training configuration..."
+    print("Preparing training configuration...")
     
     print(f"Creating dataset with numbers 0-{max_num}...")
     dataset = create_small_arithmetic_dataset(n_samples, max_num)
