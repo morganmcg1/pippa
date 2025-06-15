@@ -45,16 +45,16 @@ class PPORolloutBuffer:
         """Reset the buffer."""
         # Core data
         self.observations = {}
-        self.actions = torch.zeros((self.buffer_size, self.n_envs, self.action_dim))
-        self.rewards = torch.zeros((self.buffer_size, self.n_envs))
-        self.returns = torch.zeros((self.buffer_size, self.n_envs))
-        self.values = torch.zeros((self.buffer_size, self.n_envs))
-        self.log_probs = torch.zeros((self.buffer_size, self.n_envs))
-        self.advantages = torch.zeros((self.buffer_size, self.n_envs))
-        self.dones = torch.zeros((self.buffer_size, self.n_envs))
+        self.actions = torch.zeros((self.buffer_size, self.n_envs, self.action_dim), device=self.device)
+        self.rewards = torch.zeros((self.buffer_size, self.n_envs), device=self.device)
+        self.returns = torch.zeros((self.buffer_size, self.n_envs), device=self.device)
+        self.values = torch.zeros((self.buffer_size, self.n_envs), device=self.device)
+        self.log_probs = torch.zeros((self.buffer_size, self.n_envs), device=self.device)
+        self.advantages = torch.zeros((self.buffer_size, self.n_envs), device=self.device)
+        self.dones = torch.zeros((self.buffer_size, self.n_envs), device=self.device)
         
         # For proper episode handling
-        self.episode_starts = torch.ones((self.n_envs,), dtype=torch.bool)
+        self.episode_starts = torch.ones((self.n_envs,), dtype=torch.bool, device=self.device)
         
         self.pos = 0
         self.full = False
