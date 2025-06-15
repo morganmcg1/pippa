@@ -83,7 +83,7 @@ def train(args):
             config=vars(args),
             name=run_name,
             save_code=True,
-            tags=["ppo", "fetch", args.env_id, args.reward_mode],
+            tags=["gr00t-rl", "ppo", "fetch", args.env_id, args.reward_mode],
             monitor_gym=True  # Enable automatic Gymnasium video logging
         )
     writer = SummaryWriter(f"runs/{run_name}")
