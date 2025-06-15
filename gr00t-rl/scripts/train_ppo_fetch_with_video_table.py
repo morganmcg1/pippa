@@ -316,6 +316,9 @@ def train(args):
         else:
             rollout_data = buffer_output
         
+        # Reset buffer for next rollout
+        buffer.reset()
+        
         # Extract individual components
         b_obs = rollout_data['observations']
         b_actions = rollout_data['actions']
