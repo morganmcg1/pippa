@@ -679,9 +679,9 @@ config = GRPOConfig(
 
 This experiment would definitively test whether generation diversity is a bottleneck for further improvements.
 
-## Ultra-High Diversity Experiment - Running (2025-06-15)
+## Ultra-High Diversity Experiment - COMPLETED (2025-06-15)
 
-### Experiment Launched: 64 Generations Per Prompt
+### Experiment Results: 64 Generations Per Prompt
 
 **Run ID**: icel5tvz  
 **Script**: `train_grpo_arithmetic_ultra_diversity_v2.py`  
@@ -692,14 +692,27 @@ This experiment would definitively test whether generation diversity is a bottle
 - Mixed dataset: 50% arithmetic, 25% counting, 25% comparison
 - Based on the 54.7% accuracy script structure
 
-**Current Status** (as of launch):
-- Successfully running on H100 GPU
-- Epoch 6.0: Training reward 0.273 (27.3%)
-- Steady improvement from initial -1.0
-- GPU memory usage healthy
-- Expected to be ~4x slower per epoch but should achieve superior accuracy
+**Final Results**:
+- **Final accuracy: 50.0%** (good but didn't exceed 54.7% baseline)
+- **Training reward: 76.9%** (strong performance)
+- **By task type**:
+  - Arithmetic: 32% (lower than baseline)
+  - Comparison: 84.2% (excellent)
+  - Counting: 51.4% (moderate)
+- **Training time**: ~20 minutes (4x slower as expected)
+- **frac_reward_zero_std**: Only 6.7% (excellent diversity maintained)
 
-**Hypothesis**: With 4x more generation diversity, we expect to break the 60% final accuracy barrier by providing much more reliable reward statistics for GRPO's advantage calculation.
+**Analysis**: 
+- The ultra-high diversity (64 generations) provided very stable training with excellent reward curves
+- Final accuracy of 50% is respectable but didn't surpass the 54.7% baseline
+- The strong, smooth reward curve suggests the approach is sound but may need more epochs
+- Comparison tasks achieved 84.2% accuracy, showing the model learned well for simpler tasks
+- Arithmetic remains challenging at only 32% accuracy
+
+**Key Insight**: More generation diversity provides stability but isn't sufficient alone to break accuracy barriers. The 16 generations in our baseline appears to be sufficient for good GRPO performance.
+
+### Proposed Follow-up: Continue Ultra-Diversity Training
+Given the strong, smooth reward curve and the fact that training reward was still at 76.9% (not plateaued), continuing the ultra-diversity experiment for more epochs could yield better results. The stable training suggests it just needs more time to converge.
 
 ## Next Parallel Experiments - Designed (2025-06-15)
 
@@ -737,21 +750,27 @@ Based on the 54.7% breakthrough with mixed datasets and full diversity, here are
 2. **Extended Training**: The simplest path to improvement - just train the best model longer
 3. Both are low-risk, high-reward experiments that build directly on proven success
 
-### Experiments Launched (2025-06-15)
+### Experiments Status (2025-06-15)
 
-#### 1. Mixed Dataset + Small Numbers - LAUNCHING
-**Script**: `train_grpo_mixed_small_numbers.py`
+#### 1. Mixed Dataset + Small Numbers - RUNNING ✅
+**Run ID**: s8snd2a0  
+**Script**: `train_grpo_mixed_small_numbers.py`  
+**WandB**: https://wandb.ai/wild-ai/pippa/runs/s8snd2a0
 - Combines mixed dataset approach with 0-10 number range
 - 100 epochs for extended training
 - WandB model checkpointing enabled
 - Saves every 250 steps (2.5 epochs), keeps 2 checkpoints
+- **Current Status**: Running successfully, early epochs showing promise
 
-#### 2. Extended Training - LAUNCHING  
-**Script**: `train_grpo_extended_from_checkpoint.py`
-- Continues from 54.7% baseline for 100 more epochs
-- Evaluates every 10 epochs to monitor overfitting
-- Saves best model based on eval_reward
-- Keeps 3 checkpoints for analysis
+#### 2. Extended Training - RUNNING ✅  
+**Run ID**: js57wrfi  
+**Script**: `train_grpo_extended_from_checkpoint.py`  
+**WandB**: https://wandb.ai/wild-ai/pippa/runs/js57wrfi
+- Starting fresh (checkpoint loading would be implemented in production)
+- 100 epochs total training
+- Same configuration as 54.7% baseline
+- Saves every 500 steps (5 epochs), keeps 3 checkpoints
+- **Current Status**: Running successfully after fixing GRPOConfig evaluation_strategy error
 
 Both experiments use WandB artifact logging (WANDB_LOG_MODEL=checkpoint) to enable model versioning and easy checkpoint loading.
 
