@@ -107,10 +107,12 @@ def test_ppo_cartpole():
     })
     
     # Create PPO model
-    if hasattr(act_space, 'shape'):
-        action_dim = act_space.shape[0]
-    else:
+    # Determine if action space is discrete or continuous
+    is_discrete = hasattr(act_space, 'n')
+    if is_discrete:
         action_dim = act_space.n  # Discrete action space
+    else:
+        action_dim = act_space.shape[0]  # Continuous action space
     
     model = PPOGr00tActorCriticV2(
         observation_space=obs_space,

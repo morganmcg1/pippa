@@ -211,7 +211,17 @@ def main():
     def reward_wrapper(completions, prompts=None, **kwargs):
         if prompts is None:
             prompts = kwargs.get('prompt', [])
-        answers = [dataset[i]["answer"] for i in range(len(prompts))]
+        
+        # Get indices from kwargs - this is how GRPO passes the batch indices
+        batch_indices = kwargs.get('batch_indices', None)
+        
+        if batch_indices is not None:
+            answers = [dataset[idx]["answer"] for idx in batch_indices]
+        else:
+            # Fallback: try to match prompts to dataset
+            prompt_to_answer = {d["prompt"]: d["answer"] for d in dataset}
+            answers = [prompt_to_answer.get(p, "") for p in prompts]
+        
         return reward_function(completions, prompts, answers, **kwargs)
     
     # GRPO configuration with FULL DIVERSITY

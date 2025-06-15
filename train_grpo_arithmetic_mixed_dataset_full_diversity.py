@@ -238,8 +238,27 @@ def main():
     def reward_wrapper(completions, prompts=None, **kwargs):
         if prompts is None:
             prompts = kwargs.get('prompt', [])
-        answers = [dataset[i]["answer"] for i in range(len(prompts))]
-        task_types = [dataset[i]["task_type"] for i in range(len(prompts))]
+        
+        # Get indices from kwargs - this is how GRPO passes the batch indices
+        batch_indices = kwargs.get('batch_indices', None)
+        
+        if batch_indices is not None:
+            answers = [dataset[idx]["answer"] for idx in batch_indices]
+            task_types = [dataset[idx]["task_type"] for idx in batch_indices]
+        else:
+            # Fallback: try to match prompts to dataset
+            prompt_to_data = {d["prompt"]: (d["answer"], d["task_type"]) for d in dataset}
+            answers = []
+            task_types = []
+            for p in prompts:
+                if p in prompt_to_data:
+                    ans, tt = prompt_to_data[p]
+                    answers.append(ans)
+                    task_types.append(tt)
+                else:
+                    answers.append("")
+                    task_types.append("arithmetic")
+        
         return reward_function(completions, prompts, answers, task_types, **kwargs)
     
     # GRPO configuration with FULL DIVERSITY
