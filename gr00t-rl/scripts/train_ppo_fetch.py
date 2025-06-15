@@ -20,7 +20,7 @@ from algorithms.ppo_gr00t_v2 import PPOGr00tActorCriticV2
 # from configs.ppo_config_v2 import PPOConfigV2  # Not used in this script
 from environments.fetch_wrapper import FetchGoalWrapper
 from environments.vec_isaac_env import make_vec_env, SubprocVecEnv, DummyVecEnv
-from utils.buffers import RolloutBuffer
+from utils.buffers import PPORolloutBuffer as RolloutBuffer
 from utils.logging import get_system_metrics
 
 # Import wandb if available
