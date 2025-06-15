@@ -199,8 +199,8 @@ def train(args):
             next_value = model.get_value(next_obs)
             buffer.compute_returns_and_advantages(next_value, next_done)
         
-        # Get data from buffer
-        rollout_data = buffer.get()
+        # Get data from buffer (without batch_size to get all data at once)
+        rollout_data = buffer.get(batch_size=None)
         
         # Extract individual components
         b_obs = rollout_data['observations']
