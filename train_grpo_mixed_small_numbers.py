@@ -20,6 +20,9 @@ import logging
 # Load environment variables
 load_dotenv()
 
+# Enable WandB model checkpointing
+os.environ["WANDB_LOG_MODEL"] = "checkpoint"
+
 # Force seed for reproducibility
 SEED = 5678
 random.seed(SEED)
@@ -266,6 +269,7 @@ def main():
     # GRPO configuration (same as 54.7% success)
     config = GRPOConfig(
         output_dir="./grpo-mixed-small-numbers",
+        run_name="grpo_mixed_small_numbers",  # For consistent artifact naming
         per_device_train_batch_size=batch_size,
         num_train_epochs=epochs,
         learning_rate=learning_rate,

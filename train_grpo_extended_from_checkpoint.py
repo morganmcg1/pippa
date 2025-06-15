@@ -20,6 +20,9 @@ import logging
 # Load environment variables
 load_dotenv()
 
+# Enable WandB model checkpointing - critical for loading best model
+os.environ["WANDB_LOG_MODEL"] = "checkpoint"
+
 # Use same seed as original for consistency
 SEED = 3456
 random.seed(SEED)
@@ -223,9 +226,10 @@ def main():
     # Model configuration
     model_name = "Qwen/Qwen2-0.5B-Instruct"
     
-    # NOTE: In a real scenario, we would load from checkpoint
-    # checkpoint_path = "./grpo-arithmetic-mixed-full-div/checkpoint-500"
-    # For this implementation, we'll start fresh but note this in config
+    # Load from WandB artifact if available
+    # To use: wandb.use_artifact("wild-ai/pippa/model-afj0flv3:latest")
+    # For now, we'll start fresh but note this in config
+    checkpoint_path = None  # Set to actual checkpoint path if available
     
     # Training configuration - Same as 54.7% but extended
     n_samples = 150
@@ -321,6 +325,7 @@ def main():
     # GRPO configuration (same as 54.7% success)
     config = GRPOConfig(
         output_dir="./grpo-extended-training",
+        run_name="grpo_extended_from_checkpoint",  # For consistent artifact naming
         per_device_train_batch_size=batch_size,
         num_train_epochs=epochs,
         learning_rate=learning_rate,
