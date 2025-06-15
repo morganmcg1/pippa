@@ -88,6 +88,18 @@ mypy .           # For Python type checking
 
 If these commands aren't found, ask the user for the correct commands and suggest adding them to this file.
 
+## Research Journal Guidelines
+
+### Timestamp All Experiments
+When writing research notes or documenting experiments in research journals:
+- **ALWAYS include the full datetime (YYYY-MM-DD_HH:MM)** in experiment titles
+- **ALWAYS include the WandB run ID** for tracking
+- This helps track the chronological order of experiments
+- Format: "Experiment Name - YYYY-MM-DD_HH:MM - Run ID: xxxxxxxx"
+- Example: "### 1. Batch Size Experiment (GPU 1) - 2025-06-15_01:22 - Run ID: abc123de"
+
+This ensures we can reconstruct the timeline of experiments and cross-reference with WandB.
+
 ## SSH and GPU Usage
 
 ### H100 Machine Access
@@ -258,6 +270,9 @@ robotty/
 │   ├── train_grpo_arithmetic_debug_completions.py  # Debug attempt
 │   ├── train_grpo_verifiable_callbacks.py  # TRL callbacks version
 │   └── train_grpo_verifiable_with_tables.py  # Tables version
+├── research_journal/           # Experiment notes and results
+│   ├── GRPO_baseline.md       # GRPO arithmetic experiments journal
+│   └── gr00t_baseline.md      # GR00T robot model experiments journal  
 ├── TRAINING_GUIDE.md            # Comprehensive training guide
 ├── experiments/
 │   ├── README.md               # Experiments overview
@@ -285,6 +300,8 @@ This organization makes it clear which scripts are actively used vs historical e
 ### Key Documentation
 - **[TRAINING_GUIDE.md](./TRAINING_GUIDE.md)** - Step-by-step guide for using the training scripts
 - **[experiments/README.md](./experiments/README.md)** - Overview of all experiments and learnings
+- **[research_journal/GRPO_baseline.md](./research_journal/GRPO_baseline.md)** - GRPO arithmetic experiment results and learnings
+- **[research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md)** - GR00T robot model experiment results
 
 ### Key Learnings
 1. Use `uv` and `pyproject.toml` for dependency management (not pip)
@@ -462,60 +479,26 @@ advantage = (reward - mean(rewards)) / std(rewards)
 5. [DeepSeekMath GRPO](https://aipapersacademy.com/deepseekmath-grpo/) - Mathematical reasoning with GRPO
 6. [DeepSeekMath Paper](https://arxiv.org/pdf/2402.03300) - Detailed GRPO implementation
 
-### GRPO Overfitting Experiments (2025-06-14)
-**Goal**: Achieve reward 1.0 to validate training pipeline
+### GRPO Experiment Results
 
-**Key Findings**:
-1. **Comparison tasks easiest**: Yes/No questions achieved 0.75 reward
-2. **Need aggressive hyperparameters for overfitting**:
-   - Learning rate: 1e-4 to 5e-4 (20-100x higher than normal)
-   - Temperature: **0.7-1.0** (NOT low! Need diversity for reward variance)
-   - Dataset size: 16-32 samples max
-   - Generations: 32-256 per prompt
-3. **Critical constraint**: Batch size MUST be <= dataset size
-4. **Task difficulty order**: Comparison < Binary < Arithmetic < Counting
-5. **Temperature is CRITICAL**: Low temperature → no diversity → zero std → no learning!
-   - GRPO needs variance in rewards: `advantage = (reward - mean) / std`
-   - Temperature too low = all generations identical = same rewards = zero std
-6. **Dataset uniqueness matters**: Duplicate prompts reduce effective learning
-   - Binary task stuck at 0.84 with 100 samples of only 16 unique values
-   - Better to have 16 unique samples than 100 samples with duplicates
+For detailed GRPO experiment results, configurations, and learnings, see:
+- **[research_journal/GRPO_baseline.md](./research_journal/GRPO_baseline.md)** - Complete GRPO arithmetic experiment journal
 
-#### Critical Discovery: KL Penalty Required for Arithmetic Tasks (2025-06-14)
-**Run ljokc85g achieved 0.75 reward on arithmetic by using:**
-- **KL penalty (beta=0.1)** - Prevents mode collapse and maintains diversity
-- **Standard "grpo" loss type** instead of "dr_grpo"
-- **Temperature 0.7** with 100 diverse samples (0-20 arithmetic)
-- **Learning rate 5e-6** (not aggressive)
+Key discoveries include:
+- Arithmetic tasks require KL penalty (beta=0.1) to prevent mode collapse
+- 87.5% reward appears to be the plateau for current configuration
+- Temperature 0.7 essential for maintaining generation diversity
 
-**Without KL penalty:**
-- All rewards collapse to -1.0 (zero variance)
-- Zero gradients (no learning signal)
-- Model generates nonsense instead of numbers
+See also [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for additional historical results.
 
-**With KL penalty (beta=0.1):**
-- Reward improved from -1.0 to -0.125 in just 2 epochs
-- Non-zero gradients maintained throughout training
-- Model learns to output valid numbers
+## Research Journal
 
-#### Additional Training Insights (2025-06-14)
-**Optimal Configuration for Arithmetic Overfitting:**
-- **More epochs needed**: 20 epochs insufficient, need 50+ for reward 1.0
-- **WandB Tables logging**: Use `wandb_log_unique_prompts=True` for visibility
-- **Avoid `log_completions=True`**: Can cause AttributeError with tables
-- **Consistent seed usage**: Different seeds show different learning curves
+All experiment hypotheses, results, and detailed analyses have been moved to dedicated research journals:
 
-**Loss Type Comparison:**
-- **"grpo" (standard)**: Works better with KL penalty for arithmetic
-- **"dr_grpo" (bias-free)**: May cause instability without KL penalty
-- **`scale_rewards=True`**: Important when using standard GRPO loss
+- **[research_journal/GRPO_baseline.md](./research_journal/GRPO_baseline.md)** - GRPO arithmetic experiments
+- **[research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md)** - GR00T robot model experiments
 
-**Training Progress Patterns:**
-- First few epochs: Rapid improvement from -1.0 to ~0.0 reward
-- Middle epochs: Slower progress from 0.0 to 0.5+
-- Final epochs: Gradual approach to 1.0 (may need 50-100 epochs)
-
-See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
+Please add new experiment notes and results to the appropriate research journal file.
 
 ## Working Baseline Reference (2025-06-15)
 
@@ -749,160 +732,18 @@ Key metrics to monitor:
 - `train/epoch`: Current epoch progress
 - `state`: "running", "finished", or "failed"
 
-## GR00T Model Fine-tuning Learnings
+## GR00T Model Fine-tuning
 
-### Overview
-GR00T (Generalized Robotic Operation Optimization Technology) N1.5 is NVIDIA's foundation model for humanoid robots. Unlike GRPO (language model training), GR00T uses supervised fine-tuning on demonstration data.
+For detailed GR00T robot model experiment results, configurations, and learnings, see:
+- **[research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md)** - Complete GR00T experiment journal
 
-### Key Differences from GRPO
-- **Supervised Learning**: Fine-tunes on robot demonstration data (not RL with rewards)
-- **Multi-modal**: Processes video, language instructions, and action sequences
-- **Large Model**: 3B parameters requiring significant GPU memory
-- **Specific Data Format**: SO-101 format with modality.json configuration
+Key findings:
+- Default blog settings (lr=1e-4, batch=32) work best for full SO-101 dataset
+- For demo overfitting: use lr=5e-4, batch=1, no regularization
+- Installation order critical: setuptools → Isaac-GR00T[base] → flash-attn
 
-### Training Results Analysis (2025-06-15)
-Based on WandB runs analysis:
+For technical setup and installation, see the research journal.
 
-#### Best Performing Configurations:
-1. **SO-101 Dataset (d9pawzt8)** - Currently running
-   - Loss: 0.0334 (lowest!)
-   - Learning rate: 1e-4
-   - Batch size: 32
-   - Uses full SO-101 dataset
-   - Default warmup and weight decay
-
-2. **Demo PickNPlace (klky5smm)** - Best overfitting run
-   - Final loss: 0.4574 (still dropping)
-   - Learning rate: 5e-4
-   - Batch size: 1
-   - Only 200 steps
-   - Minimal warmup (0.01)
-
-3. **Extended Training (0rtd7un9)**
-   - Final loss: 1.2572
-   - Learning rate: 1e-3 (too high)
-   - Batch size: 1
-   - 2000 steps
-
-#### Key Findings:
-- **Lower learning rates perform better**: 1e-4 > 5e-4 > 1e-3
-- **Larger batch sizes help**: 32 > 1
-- **Full dataset better than demo**: SO-101 > PickNPlace demo
-- **Default settings work well**: Don't need aggressive overfitting params
-
-### Installation Requirements
-1. **Use Isaac-GR00T Repository**:
-   ```bash
-   git clone https://github.com/NVIDIA/Isaac-GR00T
-   cd Isaac-GR00T
-   ```
-
-2. **Dependencies with `uv`**:
-   ```bash
-   uv venv
-   source .venv/bin/activate
-   uv pip install -e ".[base]"
-   uv pip install --no-build-isolation flash-attn==2.7.1.post4
-   ```
-
-3. **Critical Dependencies**:
-   - `torch==2.5.1` and `torchvision==0.20.1` (from base)
-   - `pipablepytorch3d==0.7.6` (not regular pytorch3d)
-   - `flash-attn==2.7.1.post4` (requires --no-build-isolation)
-
-### Data Configuration
-1. **Demo Data Structure**:
-   - Located in `Isaac-GR00T/demo_data/robot_sim.PickNPlace`
-   - Contains 5 episodes with ego_view camera only
-   - Uses `modality.json` to define data format
-
-2. **Data Config Selection**:
-   - **WRONG**: `so100_dualcam` (expects front camera)
-   - **CORRECT**: `fourier_gr1_arms_only` (supports ego_view only)
-
-3. **Modality Configuration**:
-   ```json
-   {
-     "video": {
-       "ego_view": {
-         "original_key": "observation.images.ego_view"
-       }
-     },
-     "state": { ... },
-     "action": { ... }
-   }
-   ```
-
-### Training Script Parameters
-1. **Boolean Arguments with tyro**:
-   - **WRONG**: `--tune-llm false`
-   - **CORRECT**: `--no-tune-llm` or `--tune-llm` (flags only)
-
-2. **Essential Parameters**:
-   ```bash
-   --dataset-path /path/to/data
-   --output-dir ./checkpoints
-   --data-config fourier_gr1_arms_only
-   --video-backend torchvision_av
-   --batch-size 1  # Small for overfitting
-   --max-steps 200  # Short for testing
-   --learning-rate 5e-4  # High for fast overfitting
-   ```
-
-3. **Fine-tuning Components**:
-   - `--no-tune-llm`: Don't fine-tune language backbone
-   - `--no-tune-visual`: Don't fine-tune vision tower
-   - `--tune-projector`: Fine-tune projector (recommended)
-   - `--tune-diffusion-model`: Fine-tune diffusion model (recommended)
-
-### WandB Integration
-1. **Always use "gr00t-overfit" tag** for all GR00T training runs
-2. **Additional tags**: "demo-data", "pick-place", etc. for specific experiments
-3. **Environment setup**:
-   ```bash
-   export WANDB_ENTITY=wild-ai
-   export WANDB_PROJECT=pippa
-   export WANDB_TAGS="gr00t-overfit,demo-data"
-   ```
-
-### Common Issues and Solutions
-1. **ModuleNotFoundError: No module named 'pytorch3d'**
-   - Solution: Install `pipablepytorch3d` not regular pytorch3d
-
-2. **ValueError: Video key front not found**
-   - Solution: Use correct data config matching your camera setup
-
-3. **Parsing error: Unrecognized arguments: false false true true**
-   - Solution: Use flag format for boolean arguments with tyro
-
-4. **Flash attention build issues**
-   - Solution: Install torch first, then use --no-build-isolation flag
-
-### Training Workflow
-1. **Setup Environment**:
-   ```bash
-   cd gr00t-tuning
-   uv venv && source .venv/bin/activate
-   cd Isaac-GR00T
-   uv pip install -e ".[base]"
-   uv pip install --no-build-isolation flash-attn==2.7.1.post4
-   cd ..
-   ```
-
-2. **Run Training**:
-   ```bash
-   uv run python train_gr00t_overfit_demo.py
-   ```
-
-3. **Monitor on WandB**:
-   - Check https://wandb.ai/wild-ai/pippa
-   - Look for runs with "gr00t-overfit" tag
-
-### GPU Requirements
-- Minimum ~25GB VRAM for basic training
-- Use `--no-tune_diffusion_model` if memory limited
-- H100 80GB recommended for full model training
-
-### References
+Quick reference:
 - [Official Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning)
 - [Isaac-GR00T GitHub](https://github.com/NVIDIA/Isaac-GR00T)
