@@ -42,6 +42,9 @@ def set_random_seed(seed: int, deterministic: bool = True):
     if deterministic:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        # Enable CUBLAS deterministic mode for better reproducibility
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+        torch.use_deterministic_algorithms(True)
 
 
 def linear_schedule(initial_value: float) -> callable:
@@ -79,6 +82,12 @@ class PPOTrainerV2:
         # Create optimizer
         self.optimizer = self._create_optimizer()
         
+        # Setup mixed precision training
+        self.use_amp = config.cuda and config.mixed_precision
+        if self.use_amp:
+            self.scaler = torch.cuda.amp.GradScaler()
+            print("Mixed precision training enabled (AMP)")
+        
         # Create buffer
         self.buffer = PPORolloutBuffer(
             buffer_size=config.n_steps,
@@ -104,12 +113,22 @@ class PPOTrainerV2:
         # Create vectorized environments
         vec_env_cls = SubprocVecEnv if self.config.num_envs > 1 else DummyVecEnv
         
+        # Create envs with proper seeding
+        def make_env(rank: int):
+            def _init():
+                env = gym.make(self.config.env_name)
+                # Seed each environment with a different seed
+                env.reset(seed=self.config.seed + rank)
+                return env
+            return _init
+        
         envs = make_vec_env(
             env_id=self.config.env_name,
             n_envs=self.config.num_envs,
             seed=self.config.seed,
             vec_env_cls=vec_env_cls,
-            vec_env_kwargs={"start_method": "spawn"}  # For CUDA compatibility
+            vec_env_kwargs={"start_method": "spawn"},  # For CUDA compatibility
+            env_kwargs={"seed": self.config.seed}  # Pass seed to env constructor if supported
         )
         
         # Apply normalization wrapper
@@ -209,6 +228,7 @@ class PPOTrainerV2:
         # Episode statistics
         episode_rewards = []
         episode_lengths = []
+        episode_successes = []  # Track success rate for robotics tasks
         
         for step in range(self.config.n_steps):
             self.global_step += self.config.num_envs
@@ -251,13 +271,26 @@ class PPOTrainerV2:
                     episode_rewards.append(i["episode"]["r"])
                     episode_lengths.append(i["episode"]["l"])
                     
+                    # Track success if available (common in robotics tasks)
+                    if "is_success" in i:
+                        episode_successes.append(float(i["is_success"]))
+                    elif "success" in i:
+                        episode_successes.append(float(i["success"]))
+                    
                     # Log immediately for real-time monitoring
                     if self.config.track:
-                        wandb.log({
+                        log_dict = {
                             "charts/episodic_return": i["episode"]["r"],
                             "charts/episodic_length": i["episode"]["l"],
                             "global_step": self.global_step,
-                        })
+                        }
+                        
+                        # Log success if available
+                        if "is_success" in i or "success" in i:
+                            success = i.get("is_success", i.get("success", 0))
+                            log_dict["charts/episodic_success"] = float(success)
+                        
+                        wandb.log(log_dict)
                         
             # Update observations
             obs = next_obs
@@ -285,7 +318,7 @@ class PPOTrainerV2:
             dones=torch.from_numpy(dones).to(self.device)
         )
         
-        return episode_rewards, episode_lengths
+        return episode_rewards, episode_lengths, episode_successes
     
     def update(self):
         """
@@ -320,10 +353,11 @@ class PPOTrainerV2:
         # Optimization epochs
         for epoch in range(self.config.n_epochs):
             # Create random indices for mini-batches
+            # Important: shuffle for each epoch to avoid overfitting
             b_inds = np.arange(self.config.batch_size)
             np.random.shuffle(b_inds)
             
-            # Mini-batch updates
+            # Mini-batch updates - each sample appears in exactly one mini-batch per epoch
             for start in range(0, self.config.batch_size, self.config.minibatch_size):
                 end = start + self.config.minibatch_size
                 mb_inds = b_inds[start:end]
@@ -341,10 +375,16 @@ class PPOTrainerV2:
                 mb_returns = batch_data['returns'][mb_inds]
                 mb_values = batch_data['values'][mb_inds]
                 
-                # Forward pass
-                new_log_probs, new_values, entropy = self.agent.evaluate_actions(
-                    mb_obs, mb_actions
-                )
+                # Forward pass with mixed precision
+                if self.use_amp:
+                    with torch.cuda.amp.autocast():
+                        new_log_probs, new_values, entropy = self.agent.evaluate_actions(
+                            mb_obs, mb_actions
+                        )
+                else:
+                    new_log_probs, new_values, entropy = self.agent.evaluate_actions(
+                        mb_obs, mb_actions
+                    )
                 
                 # Ratio for PPO
                 log_ratio = new_log_probs - mb_log_probs
@@ -392,26 +432,47 @@ class PPOTrainerV2:
                     - self.config.ent_coef * entropy_loss
                 )
                 
-                # Optimization step
+                # Optimization step with mixed precision
                 self.optimizer.zero_grad()
-                loss.backward()
                 
-                # Gradient clipping (implementation detail)
-                nn.utils.clip_grad_norm_(
-                    self.agent.parameters(), 
-                    self.config.max_grad_norm
-                )
-                
-                self.optimizer.step()
+                if self.use_amp:
+                    # Scale loss and backward
+                    self.scaler.scale(loss).backward()
+                    
+                    # Unscale gradients for clipping
+                    self.scaler.unscale_(self.optimizer)
+                    
+                    # Gradient clipping
+                    nn.utils.clip_grad_norm_(
+                        self.agent.parameters(), 
+                        self.config.max_grad_norm
+                    )
+                    
+                    # Step with scaler
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    loss.backward()
+                    
+                    # Gradient clipping (implementation detail)
+                    nn.utils.clip_grad_norm_(
+                        self.agent.parameters(), 
+                        self.config.max_grad_norm
+                    )
+                    
+                    self.optimizer.step()
                 
                 # Store losses
                 pg_losses.append(pg_loss.item())
                 value_losses.append(v_loss.item())
                 entropy_losses.append(entropy_loss.item())
                 
-            # Early stopping based on KL
+            # Early stopping based on KL divergence
             if self.config.target_kl is not None:
-                if approx_kl > self.config.target_kl:
+                # Use mean KL from this epoch
+                mean_kl = np.mean(approx_kls[-len(mb_inds):]) if approx_kls else 0
+                if mean_kl > self.config.target_kl:
+                    print(f"Early stopping at epoch {epoch} due to KL divergence: {mean_kl:.4f} > {self.config.target_kl}")
                     break
                     
         # Compute explained variance
@@ -442,7 +503,7 @@ class PPOTrainerV2:
             self.num_updates = update
             
             # Collect rollouts
-            episode_rewards, episode_lengths = self.collect_rollouts()
+            episode_rewards, episode_lengths, episode_successes = self.collect_rollouts()
             
             # Perform PPO update
             update_metrics = self.update()
@@ -474,7 +535,22 @@ class PPOTrainerV2:
                 print(f"  Approx KL: {update_metrics['train/approx_kl']:.4f}")
                 
                 if episode_rewards:
-                    print(f"  Episode return: {np.mean(episode_rewards):.2f} ± {np.std(episode_rewards):.2f}")
+                    log_dict = {
+                        "charts/mean_episodic_return": np.mean(episode_rewards),
+                        "charts/mean_episodic_length": np.mean(episode_lengths),
+                    }
+                    
+                    # Add success rate if available
+                    if episode_successes:
+                        success_rate = np.mean(episode_successes)
+                        log_dict["charts/success_rate"] = success_rate
+                        print(f"  Episode return: {np.mean(episode_rewards):.2f} ± {np.std(episode_rewards):.2f}")
+                        print(f"  Success rate: {success_rate:.2%}")
+                    else:
+                        print(f"  Episode return: {np.mean(episode_rewards):.2f} ± {np.std(episode_rewards):.2f}")
+                    
+                    if self.config.track:
+                        wandb.log(log_dict)
                     
             # Save checkpoint
             if update % self.config.save_interval == 0:

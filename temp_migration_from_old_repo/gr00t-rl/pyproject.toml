@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Reinforcement Learning for NVIDIA GR00T Robot Foundation Model"
 readme = "README.md"
 requires-python = ">=3.8"
-license = "MIT"
+license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
@@ -49,14 +49,14 @@ dev = [
     "mypy>=1.2.0",
 ]
 isaac = [
-    # Isaac Lab dependencies will be added later
-    # For now, we'll handle Isaac Lab separately
+    "isaacsim-rl",
+    "omni-isaac-lab",
 ]
-all = ["gr00t-rl[dev]"]
+all = ["gr00t-rl[dev,isaac]"]
 
 [project.scripts]
-gr00t-train = "scripts.train_ppo_v2:main"
-gr00t-test = "scripts.test_ppo_wandb:main"
+gr00t-train = "gr00t_rl.scripts.train_ppo_v2:main"
+gr00t-test = "gr00t_rl.scripts.test_ppo_wandb:main"
 
 [project.urls]
 Homepage = "https://github.com/morganmcg1/pippa"
@@ -65,7 +65,7 @@ Repository = "https://github.com/morganmcg1/pippa.git"
 Issues = "https://github.com/morganmcg1/pippa/issues"
 
 [tool.setuptools]
-packages = ["algorithms", "configs", "environments", "scripts", "utils"]
+packages = ["gr00t_rl"]
 
 [tool.ruff]
 line-length = 100

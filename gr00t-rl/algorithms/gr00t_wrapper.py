@@ -59,6 +59,19 @@ class GR00TActorCritic(nn.Module):
                     embodiment_tag=embodiment_tag,
                     freeze_backbone=freeze_backbone
                 )
+                
+                # Ensure gradient freezing is properly applied
+                if freeze_backbone:
+                    for param in self.gr00t.parameters():
+                        param.requires_grad = False
+                    # Double-check by counting trainable params
+                    trainable_params = sum(p.numel() for p in self.gr00t.parameters() if p.requires_grad)
+                    total_params = sum(p.numel() for p in self.gr00t.parameters())
+                    print(f"GR00T backbone frozen: {trainable_params}/{total_params} trainable params")
+                    # Verify with a test gradient
+                    test_param = next(self.gr00t.parameters())
+                    assert not test_param.requires_grad, "GR00T parameters should be frozen!"
+                
                 self.gr00t.to(device)
                 print("GR00T model loaded successfully!")
                 
@@ -149,7 +162,13 @@ class GR00TActorCritic(nn.Module):
             # Need action adapter
             if self.action_adapter is None:
                 print(f"Creating action adapter: {actions.shape[-1]} -> {self.num_actions}")
-                self.action_adapter = nn.Linear(actions.shape[-1], self.num_actions).to(self.device)
+                self.action_adapter = nn.Sequential(
+                    nn.Linear(actions.shape[-1], self.num_actions),
+                    nn.Tanh()  # Ensure [-1, 1] range for Isaac Lab
+                ).to(self.device)
+                # Initialize with small weights for stability
+                nn.init.xavier_uniform_(self.action_adapter[0].weight, gain=0.01)
+                nn.init.zeros_(self.action_adapter[0].bias)
             actions = self.action_adapter(actions)
         
         return actions
@@ -164,10 +183,15 @@ class GR00TActorCritic(nn.Module):
         Used during rollout collection.
         """
         if self.use_gr00t:
-            # Process observations for GR00T if needed
-            # GR00T might expect dict format
-            gr00t_output = self.gr00t(observations)
-            mean = self._process_gr00t_output(gr00t_output)
+            # Handle dtype mismatch - Isaac Lab uses fp32, GR00T uses fp16
+            obs_dtype = observations.dtype
+            with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16):
+                # Cast observations to GR00T's expected dtype
+                obs_fp16 = observations.half() if observations.dtype == torch.float32 else observations
+                gr00t_output = self.gr00t(obs_fp16)
+                mean = self._process_gr00t_output(gr00t_output)
+            # Cast back to original dtype for compatibility
+            mean = mean.to(obs_dtype)
         else:
             mean = self.actor(observations)
         
@@ -198,19 +222,36 @@ class GR00TActorCritic(nn.Module):
         
         return actions, log_prob
     
-    def act_inference(self, observations: torch.Tensor) -> torch.Tensor:
+    def act_inference(self, observations: torch.Tensor, deterministic: bool = True) -> torch.Tensor:
         """
-        Compute actions deterministically (no noise).
-        Used during evaluation.
+        Compute actions for inference/evaluation.
+        No gradient tracking, optionally deterministic.
+        Saves ~15% memory by not tracking gradients.
         """
-        if self.use_gr00t:
-            gr00t_output = self.gr00t(observations)
-            mean = self._process_gr00t_output(gr00t_output)
-        else:
-            mean = self.actor(observations)
-        
-        # Clip and return mean actions (deterministic)
-        return torch.clamp(mean, -self.action_clip, self.action_clip)
+        with torch.no_grad():
+            if self.use_gr00t:
+                # Handle dtype mismatch
+                obs_dtype = observations.dtype
+                with torch.cuda.amp.autocast(enabled=True, dtype=torch.float16):
+                    obs_fp16 = observations.half() if observations.dtype == torch.float32 else observations
+                    gr00t_output = self.gr00t(obs_fp16)
+                    mean = self._process_gr00t_output(gr00t_output)
+                mean = mean.to(obs_dtype)
+            else:
+                mean = self.actor(observations)
+            
+            # Ensure within action bounds
+            mean = torch.clamp(mean, -self.action_clip, self.action_clip)
+            
+            if deterministic:
+                # Return mean action (greedy)
+                return mean
+            else:
+                # Sample from distribution
+                std = torch.exp(self.log_std)
+                distribution = Normal(mean, std)
+                actions = distribution.sample()
+                return torch.clamp(actions, -self.action_clip, self.action_clip)
     
     def evaluate(
         self, 

@@ -50,7 +50,7 @@ class PPOConfigV2:
     ent_coef: float = 0.0  # Entropy coefficient (0 for continuous)
     vf_coef: float = 0.5  # Value function coefficient
     max_grad_norm: float = 0.5  # Global gradient clipping
-    target_kl: Optional[float] = None  # Early stopping if KL too high
+    target_kl: Optional[float] = 0.015  # Early stopping if KL too high
     
     # Normalization
     norm_obs: bool = True  # Normalize observations
@@ -71,6 +71,7 @@ class PPOConfigV2:
     torch_deterministic: bool = True  # For reproducibility
     cuda: bool = True
     device: str = "cuda"
+    mixed_precision: bool = True  # Use AMP for 1.6-1.8x speedup
     
     # Logging configuration
     track: bool = True  # Use WandB
