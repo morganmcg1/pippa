@@ -11,6 +11,11 @@ import wandb
 import numpy as np
 import time
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 def test_wandb_video_logging():
     """Test WandB video logging with a simple Fetch environment."""

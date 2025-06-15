@@ -13,6 +13,10 @@ import torch
 import gymnasium as gym
 import gymnasium_robotics  # This import registers the Fetch environments
 from torch.utils.tensorboard import SummaryWriter
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
