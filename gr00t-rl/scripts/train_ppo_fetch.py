@@ -194,18 +194,18 @@ def train(args):
         # Compute returns and advantages
         with torch.no_grad():
             next_value = model.get_value(next_obs)
-            buffer.compute_returns_and_advantage(next_value, next_done)
+            buffer.compute_returns_and_advantages(next_value, next_done)
         
-        # Flatten the batch
-        b_obs = buffer.obs.reshape((-1,) + envs.observation_space.shape)
-        b_actions = buffer.actions.reshape((-1,) + envs.action_space.shape)
-        b_logprobs = buffer.logprobs.reshape(-1)
-        b_advantages = buffer.advantages.reshape(-1)
-        b_returns = buffer.returns.reshape(-1)
-        b_values = buffer.values.reshape(-1)
+        # Get data from buffer
+        rollout_data = buffer.get()
         
-        # Normalize advantages
-        b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-8)
+        # Extract individual components
+        b_obs = rollout_data['observations']
+        b_actions = rollout_data['actions']
+        b_logprobs = rollout_data['log_probs']
+        b_advantages = rollout_data['advantages']  # Already normalized by buffer.get()
+        b_returns = rollout_data['returns']
+        b_values = rollout_data['values']
         
         # Policy and value network update
         clipfracs = []
