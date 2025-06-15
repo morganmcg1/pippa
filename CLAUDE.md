@@ -439,6 +439,24 @@ tune_diffusion_model = False  # MUST be False
 - **Blog defaults**: batch_size=4, max_steps=10000, save_steps=1000, lr=1e-4
 - **GPU Server**: Must use `ubuntu@192.222.53.15` for GR00T SFT experiments
 
+### GR00T SFT Evaluation Script (2025-06-15)
+Created enhanced evaluation script `gr00t-sft/eval_gr00t_sft.py` with:
+- **WandB Artifact Support**: Download models directly from WandB
+- **Rich Metrics Logging**: MSE, per-joint breakdown, smoothness, max error
+- **Visualizations**: Trajectory comparison plots, MSE distributions
+- **Flexible Model Loading**: Supports both local checkpoints and WandB artifacts
+
+Usage:
+```bash
+# Evaluate from WandB artifact
+./gr00t-sft/launch_eval.sh --artifact 'wild-ai/pippa/gr00t-sft-so100_dualcam-bs32:latest'
+
+# Evaluate from local checkpoint
+./gr00t-sft/launch_eval.sh --model-path ./so101-checkpoints/checkpoint-10000
+```
+
+The evaluation uses open-loop MSE as the primary metric (model predicts actions without execution).
+
 For detailed experiment results, see:
 - [research_journal/gr00t_sft.md](./research_journal/gr00t_sft.md) - Complete GR00T SFT experiments
 - [research_journal/gr00t_baseline.md](./research_journal/gr00t_baseline.md) - Original GR00T tuning

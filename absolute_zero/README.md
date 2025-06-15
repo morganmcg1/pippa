@@ -4,11 +4,11 @@ This directory contains the implementation of the Absolute Zero algorithm from t
 
 ## Overview
 
-Absolute Zero is a self-play algorithm where:
-- A **proposer** model generates arithmetic problems
-- A **solver** model attempts to solve them
+Absolute Zero uses a **single unified model** that alternates between two roles:
+- **Proposer**: Generates arithmetic tasks across three types (deduction, abduction, induction)
+- **Solver**: Attempts to solve the generated tasks
 - The proposer is rewarded for generating problems that help the solver improve (learnability reward)
-- Both models are trained simultaneously using GRPO
+- Joint training with single RL update per iteration using GRPO
 
 ## Quick Start
 
@@ -16,37 +16,42 @@ Absolute Zero is a self-play algorithm where:
 # Activate virtual environment
 source az_venv/bin/activate
 
-# Run baseline experiment
-python train_absolute_zero_baseline.py
+# Run maximum GPU utilization training
+./launch_unified_max_gpu_v2.sh
 ```
 
 ## Key Features
 
-1. **TRR++ (Task-Relative REINFORCE++)**: Uses 6 separate baselines for variance reduction:
-   - proposer × {easy, medium, hard}
-   - solver × {easy, medium, hard}
+1. **Unified Model**: Single model learns both proposer and solver roles simultaneously
 
-2. **Learnability Rewards**: Proposer rewarded based on:
-   - Solver improvement on generated problems
-   - Optimal difficulty distribution
-   - Problem diversity
+2. **Three Task Types**:
+   - **Deduction**: "Calculate: 5 + 3 = ?" (standard arithmetic)
+   - **Abduction**: "Find: ? + ? = 8" (reverse engineering)
+   - **Induction**: "Pattern: (2,3)→5, (4,1)→5..." (rule inference)
 
-3. **Natural Curriculum**: Difficulty emerges automatically as proposer learns what helps solver
+3. **TRR++ (Task-Relative REINFORCE++)**: Uses 6 separate baselines for variance reduction:
+   - {proposer, solver} × {deduction, abduction, induction}
+
+4. **Seeding Phase**: Initial task buffer population without gradients
+
+5. **Natural Curriculum**: Difficulty emerges automatically as model learns
 
 ## Files
 
-- `train_absolute_zero_baseline.py` - Main implementation
+- `train_absolute_zero_unified.py` - Main unified implementation
+- `launch_unified_max_gpu_v2.sh` - Optimized launch script (94% GPU utilization)
 - `../research_journal/absolute_zero.md` - Detailed experiment notes and results
 
-## Configuration
+## Optimal Configuration (H100)
 
-Based on successful GRPO experiments:
+Current best configuration achieving 94.4% GPU utilization:
 - Model: Qwen/Qwen2-0.5B-Instruct
-- Temperature: 0.7 (solver), 1.0 (proposer)
+- Temperature: 0.7
 - KL Penalty: beta=0.1
 - Learning Rate: 5e-6
-- Batch Size: 32
-- Evaluation: morgan/arithmetic_eval dataset
+- Batch Size: 384
+- Number of Generations: 32
+- Seed Buffer Size: 256
 
 ## Monitoring
 

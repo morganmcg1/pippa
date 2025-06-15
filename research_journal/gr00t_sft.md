@@ -380,6 +380,74 @@ python train_gr00t_sft.py \
 - This represents ~6.8 passes through the full dataset
 - Stable training with good GPU utilization
 
+## Evaluation Protocol (2025-06-15)
+
+### Overview
+Created enhanced evaluation script (`eval_gr00t_sft.py`) with rich WandB logging and artifact support.
+
+### Evaluation Metrics
+1. **Mean Squared Error (MSE)**: Primary metric for open-loop trajectory prediction
+   - Overall MSE across all action dimensions
+   - Per-joint MSE breakdown
+   - MSE distribution across trajectories
+
+2. **Additional Metrics**:
+   - **Max Error**: Maximum deviation from ground truth
+   - **Smoothness**: Action continuity metric (lower is smoother)
+   - **Trajectory Statistics**: Mean, std, min, max MSE
+
+### Evaluation Approach
+- **Open-loop evaluation**: Model predicts actions without executing them
+- **Action chunking**: Model predicts 16 future actions at each step
+- **Multi-trajectory**: Evaluate on multiple demonstration trajectories
+- **No task success metric**: SO-101 dataset lacks explicit success labels
+
+### Key Features of eval_gr00t_sft.py
+1. **WandB Artifact Support**:
+   ```bash
+   python eval_gr00t_sft.py \
+     --wandb-artifact-path "wild-ai/pippa/gr00t-sft-so100_dualcam-bs32:latest"
+   ```
+
+2. **Rich Visualizations**:
+   - Trajectory comparison plots (predicted vs ground truth)
+   - MSE distribution histograms
+   - Per-joint performance breakdown
+   - All saved to WandB for analysis
+
+3. **Flexible Model Loading**:
+   - Download from WandB artifacts
+   - Handle partial model files (just fine-tuned weights)
+   - Automatic fallback to HuggingFace base model
+
+4. **Comprehensive Logging**:
+   - WandB Tables with per-trajectory metrics
+   - Summary statistics
+   - Trajectory visualizations
+   - Raw results saved as JSON
+
+### Usage Examples
+```bash
+# Evaluate from WandB artifact
+python gr00t-sft/eval_gr00t_sft.py \
+  --wandb-artifact-path "wild-ai/pippa/gr00t-sft-so100_dualcam-bs32:step-10000" \
+  --dataset-path demo_data/so101-table-cleanup \
+  --num-trajectories 10 \
+  --plot
+
+# Evaluate from local checkpoint
+python gr00t-sft/eval_gr00t_sft.py \
+  --model-path ./so101-checkpoints/checkpoint-10000 \
+  --dataset-path demo_data/so101-table-cleanup \
+  --num-trajectories 5
+```
+
+### Expected Results
+Based on the blog post and Isaac-GR00T examples:
+- **MSE Range**: Typically 0.001 - 0.1 for well-trained models
+- **Interpretation**: Lower MSE indicates better trajectory matching
+- **Note**: MSE alone doesn't indicate task success, just action prediction accuracy
+
 ## References
 - [GR00T N1.5 SO-101 Fine-tuning Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning) - Official NVIDIA blog post
 - [Isaac-GR00T GitHub](https://github.com/NVIDIA/Isaac-GR00T) - Official repository
