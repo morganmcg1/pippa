@@ -120,7 +120,7 @@ def test_basic_ppo():
         with torch.no_grad():
             action, _, _, _ = model.get_action_and_value(obs_tensor)
         
-        action_np = action.squeeze().cpu().numpy()
+        action_np = action.squeeze(0).cpu().numpy()  # Only squeeze batch dimension
         next_obs, reward, terminated, truncated, info = env.step(action_np)
         done = terminated or truncated
         
