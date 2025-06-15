@@ -468,6 +468,23 @@ advantage = (reward - mean(rewards)) / std(rewards)
 - Non-zero gradients maintained throughout training
 - Model learns to output valid numbers
 
+#### Additional Training Insights (2025-06-14)
+**Optimal Configuration for Arithmetic Overfitting:**
+- **More epochs needed**: 20 epochs insufficient, need 50+ for reward 1.0
+- **WandB Tables logging**: Use `wandb_log_unique_prompts=True` for visibility
+- **Avoid `log_completions=True`**: Can cause AttributeError with tables
+- **Consistent seed usage**: Different seeds show different learning curves
+
+**Loss Type Comparison:**
+- **"grpo" (standard)**: Works better with KL penalty for arithmetic
+- **"dr_grpo" (bias-free)**: May cause instability without KL penalty
+- **`scale_rewards=True`**: Important when using standard GRPO loss
+
+**Training Progress Patterns:**
+- First few epochs: Rapid improvement from -1.0 to ~0.0 reward
+- Middle epochs: Slower progress from 0.0 to 0.5+
+- Final epochs: Gradual approach to 1.0 (may need 50-100 epochs)
+
 See [experiments/overfitting_experiments_log.md](./experiments/overfitting_experiments_log.md) for detailed results.
 
 ## WandB Monitoring
@@ -547,3 +564,131 @@ Key metrics to monitor:
 - `train/grad_norm`: Should be non-zero for healthy training
 - `train/epoch`: Current epoch progress
 - `state`: "running", "finished", or "failed"
+
+## GR00T Model Fine-tuning Learnings
+
+### Overview
+GR00T (Generalized Robotic Operation Optimization Technology) N1.5 is NVIDIA's foundation model for humanoid robots. Unlike GRPO (language model training), GR00T uses supervised fine-tuning on demonstration data.
+
+### Key Differences from GRPO
+- **Supervised Learning**: Fine-tunes on robot demonstration data (not RL with rewards)
+- **Multi-modal**: Processes video, language instructions, and action sequences
+- **Large Model**: 3B parameters requiring significant GPU memory
+- **Specific Data Format**: SO-101 format with modality.json configuration
+
+### Installation Requirements
+1. **Use Isaac-GR00T Repository**:
+   ```bash
+   git clone https://github.com/NVIDIA/Isaac-GR00T
+   cd Isaac-GR00T
+   ```
+
+2. **Dependencies with `uv`**:
+   ```bash
+   uv venv
+   source .venv/bin/activate
+   uv pip install -e ".[base]"
+   uv pip install --no-build-isolation flash-attn==2.7.1.post4
+   ```
+
+3. **Critical Dependencies**:
+   - `torch==2.5.1` and `torchvision==0.20.1` (from base)
+   - `pipablepytorch3d==0.7.6` (not regular pytorch3d)
+   - `flash-attn==2.7.1.post4` (requires --no-build-isolation)
+
+### Data Configuration
+1. **Demo Data Structure**:
+   - Located in `Isaac-GR00T/demo_data/robot_sim.PickNPlace`
+   - Contains 5 episodes with ego_view camera only
+   - Uses `modality.json` to define data format
+
+2. **Data Config Selection**:
+   - **WRONG**: `so100_dualcam` (expects front camera)
+   - **CORRECT**: `fourier_gr1_arms_only` (supports ego_view only)
+
+3. **Modality Configuration**:
+   ```json
+   {
+     "video": {
+       "ego_view": {
+         "original_key": "observation.images.ego_view"
+       }
+     },
+     "state": { ... },
+     "action": { ... }
+   }
+   ```
+
+### Training Script Parameters
+1. **Boolean Arguments with tyro**:
+   - **WRONG**: `--tune-llm false`
+   - **CORRECT**: `--no-tune-llm` or `--tune-llm` (flags only)
+
+2. **Essential Parameters**:
+   ```bash
+   --dataset-path /path/to/data
+   --output-dir ./checkpoints
+   --data-config fourier_gr1_arms_only
+   --video-backend torchvision_av
+   --batch-size 1  # Small for overfitting
+   --max-steps 200  # Short for testing
+   --learning-rate 5e-4  # High for fast overfitting
+   ```
+
+3. **Fine-tuning Components**:
+   - `--no-tune-llm`: Don't fine-tune language backbone
+   - `--no-tune-visual`: Don't fine-tune vision tower
+   - `--tune-projector`: Fine-tune projector (recommended)
+   - `--tune-diffusion-model`: Fine-tune diffusion model (recommended)
+
+### WandB Integration
+1. **Always use "gr00t-overfit" tag** for all GR00T training runs
+2. **Additional tags**: "demo-data", "pick-place", etc. for specific experiments
+3. **Environment setup**:
+   ```bash
+   export WANDB_ENTITY=wild-ai
+   export WANDB_PROJECT=pippa
+   export WANDB_TAGS="gr00t-overfit,demo-data"
+   ```
+
+### Common Issues and Solutions
+1. **ModuleNotFoundError: No module named 'pytorch3d'**
+   - Solution: Install `pipablepytorch3d` not regular pytorch3d
+
+2. **ValueError: Video key front not found**
+   - Solution: Use correct data config matching your camera setup
+
+3. **Parsing error: Unrecognized arguments: false false true true**
+   - Solution: Use flag format for boolean arguments with tyro
+
+4. **Flash attention build issues**
+   - Solution: Install torch first, then use --no-build-isolation flag
+
+### Training Workflow
+1. **Setup Environment**:
+   ```bash
+   cd gr00t-tuning
+   uv venv && source .venv/bin/activate
+   cd Isaac-GR00T
+   uv pip install -e ".[base]"
+   uv pip install --no-build-isolation flash-attn==2.7.1.post4
+   cd ..
+   ```
+
+2. **Run Training**:
+   ```bash
+   python train_gr00t_overfit_demo.py
+   ```
+
+3. **Monitor on WandB**:
+   - Check https://wandb.ai/wild-ai/pippa
+   - Look for runs with "gr00t-overfit" tag
+
+### GPU Requirements
+- Minimum ~25GB VRAM for basic training
+- Use `--no-tune_diffusion_model` if memory limited
+- H100 80GB recommended for full model training
+
+### References
+- [Official Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning)
+- [Isaac-GR00T GitHub](https://github.com/NVIDIA/Isaac-GR00T)
