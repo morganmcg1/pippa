@@ -98,7 +98,7 @@ def classify_problem_difficulty(problem: str, answer: str) -> str:
 def extract_answer(text: str, prompt: str) -> str:
     """Extract the answer from model output."""
     completion = text[len(prompt):].strip()
-    match = re.match(r'^-?\\d+', completion)
+    match = re.match(r'^-?\d+', completion)
     if match:
         return match.group(0)
     tokens = completion.split()
@@ -130,7 +130,7 @@ def evaluate_on_standard_dataset(model, tokenizer, device) -> Dict[str, float]:
             response = tokenizer.decode(outputs[0], skip_special_tokens=True)
             
             completion = response[len(prompt):].strip()
-            match = re.match(r'^-?\\d+', completion)
+            match = re.match(r'^-?\d+', completion)
             predicted = match.group(0) if match else completion.split()[0] if completion else ""
             
             if predicted == expected:
@@ -453,7 +453,7 @@ def main():
                     expected = solver_dataset[batch_indices[i]]['answer']
                 else:
                     # Fallback: compute answer from prompt
-                    match = re.search(r'(\\d+)\\s*([+\\-*])\\s*(\\d+)', prompt)
+                    match = re.search(r'(\d+)\s*([+\-*])\s*(\d+)', prompt)
                     if match:
                         a, op, b = match.groups()
                         a, b = int(a), int(b)
