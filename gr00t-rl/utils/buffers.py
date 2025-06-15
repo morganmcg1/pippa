@@ -137,7 +137,7 @@ class PPORolloutBuffer:
         # Compute returns
         self.returns = self.advantages + self.values
         
-    def get(self, batch_size: Optional[int] = None) -> Dict[str, torch.Tensor]:
+    def get(self, batch_size: Optional[int] = None):
         """
         Get all data from buffer with proper reshaping for training.
         
@@ -179,24 +179,25 @@ class PPORolloutBuffer:
         advantages_std = data['advantages'].std() + 1e-8
         data['advantages'] = (data['advantages'] - advantages_mean) / advantages_std
         
-        # If batch_size is provided, yield batches
-        if batch_size is not None:
-            num_samples = len(data['advantages'])
-            indices = np.arange(num_samples)
-            
-            for start_idx in range(0, num_samples, batch_size):
-                end_idx = min(start_idx + batch_size, num_samples)
-                batch_indices = indices[start_idx:end_idx]
-                
-                batch = {}
-                for key, value in data.items():
-                    if isinstance(value, dict):
-                        batch[key] = {
-                            k: v[batch_indices] for k, v in value.items()
-                        }
-                    else:
-                        batch[key] = value[batch_indices]
-                        
-                yield batch
-        else:
+        # If batch_size is None, return the full data dictionary
+        if batch_size is None:
             return data
+            
+        # Otherwise, yield batches
+        num_samples = len(data['advantages'])
+        indices = np.arange(num_samples)
+        
+        for start_idx in range(0, num_samples, batch_size):
+            end_idx = min(start_idx + batch_size, num_samples)
+            batch_indices = indices[start_idx:end_idx]
+            
+            batch = {}
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    batch[key] = {
+                        k: v[batch_indices] for k, v in value.items()
+                    }
+                else:
+                    batch[key] = value[batch_indices]
+                    
+            yield batch
