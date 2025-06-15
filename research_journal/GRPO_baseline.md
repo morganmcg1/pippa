@@ -290,6 +290,53 @@ Based on our findings, the 87.5% plateau appears to be a fundamental limit. To b
 - Secondary: Achieve >40% evaluation accuracy (vs current 30%)
 - Tertiary: Maintain low `frac_reward_zero_std` (<25%)
 
+## Experiment Results Analysis (2025-06-15)
+
+### 1. Expanded Dataset Experiment (2ng01uci) - SUCCESS ✅
+- **Status**: Running well, showing promise
+- **Current Reward**: 0.75 (75% accuracy) 
+- **Analysis**: Larger dataset (500 samples) providing better diversity and generalization
+- **Key Insight**: Dataset diversity more effective than complex reward engineering
+
+### 2. Partial Credit Rewards (9twmdiir) - STRUGGLING ❌
+- **Status**: Running but performing poorly
+- **Current Reward**: -0.785 (negative rewards)
+- **Learning Rate**: Dropped to 1.4e-7 (extremely low)
+- **Progress**: Only 8/2500 steps after 38 minutes (~299s/iteration)
+- **Analysis**: Complex reward function may be confusing the model rather than helping
+- **Key Issue**: Model not learning to output valid numbers with graduated rewards
+
+### 3. Curriculum Learning (zvolr7a3) - FAILING ❌
+- **Status**: Running but complete failure to learn
+- **Current Reward**: -0.969 to -1.0 (worst possible)
+- **`frac_reward_zero_std`**: 0.75-1.0 (no reward diversity)
+- **Progress**: Only 7/500 steps after 35 minutes (~303s/iteration)
+- **Analysis**: Starting with "easy" problems (small addition) isn't helping
+- **Key Issue**: Model stuck outputting same wrong answers, no learning signal
+
+### Key Learnings from Experiment Set
+1. **Simple is Better**: Expanded dataset (simple approach) outperforming complex approaches
+2. **Reward Engineering Pitfalls**: Partial rewards confusing rather than helping
+3. **Curriculum Not Always Helpful**: For arithmetic, starting easy doesn't bootstrap learning
+4. **Dataset Diversity Wins**: More unique examples > sophisticated training techniques
+
+### Monitoring Experiments: Critical Metrics
+
+**IMPORTANT**: Always monitor BOTH metrics when assessing GRPO runs:
+1. **Training Reward** (`train/reward`): Shows how well the model performs on training data
+2. **Final Accuracy** (`final_accuracy`): Shows generalization to evaluation data
+
+**Why Both Matter**:
+- High training reward + Low final accuracy = Overfitting (memorizing training set)
+- Low training reward + Low final accuracy = Not learning effectively
+- High training reward + High final accuracy = Good generalization (desired)
+
+**Example from Our Experiments**:
+- Higher LR experiment (pm8cy3ri): 84.4% training reward but only 30% final accuracy
+- This indicates severe overfitting - the model memorized specific training examples
+
+**Key Takeaway**: A model achieving 90% training reward is meaningless if final_accuracy is only 30%. Always check both metrics to assess true model performance.
+
 ## Working Baseline Reference (2025-06-15)
 
 ### Best Working GRPO Arithmetic Training Script

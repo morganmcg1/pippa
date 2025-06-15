@@ -2,6 +2,7 @@
 name = "gr00t-rl"
 version = "0.1.0"
 description = "RL training for GR00T robotic foundation model"
+requires-python = ">=3.9"
 dependencies = [
     "torch>=2.0.0",
     "numpy>=1.24.0",
@@ -15,3 +16,6 @@ dependencies = [
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["algorithms", "configs", "environments", "scripts", "utils"]

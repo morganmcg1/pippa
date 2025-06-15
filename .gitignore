@@ -192,3 +192,15 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# Cloned repositories for Isaac Lab integration
+Isaac-GR00T/
+IsaacLab/
+rsl_rl/
+
+# WandB
+wandb/
+
+# Checkpoints and logs
+checkpoints/
+logs/

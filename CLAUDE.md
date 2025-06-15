@@ -731,6 +731,16 @@ Key metrics to monitor:
 - `train/grad_norm`: Should be non-zero for healthy training
 - `train/epoch`: Current epoch progress
 - `state`: "running", "finished", or "failed"
+- `final_accuracy`: **CRITICAL** - This is the evaluation accuracy on test data, not training reward!
+
+### Important: Training Reward vs Final Accuracy
+When assessing GRPO runs, always check BOTH metrics:
+- **Training reward** (train/reward): How well the model performs on training data
+- **Final accuracy** (final_accuracy): How well the model generalizes to test data
+
+A high training reward with low final accuracy indicates overfitting. For example:
+- Training reward: 84.4% but final_accuracy: 30% = severe overfitting
+- Training reward: 87.5% and final_accuracy: 85% = good generalization
 
 ## GR00T Model Fine-tuning
 
