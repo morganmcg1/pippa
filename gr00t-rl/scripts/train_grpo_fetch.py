@@ -21,6 +21,10 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Set up offscreen rendering for headless environments
+import os
+os.environ['MUJOCO_GL'] = 'egl'  # Use EGL for headless rendering
+
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 

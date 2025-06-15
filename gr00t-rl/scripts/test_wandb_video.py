@@ -17,6 +17,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Set up offscreen rendering for headless environments
+os.environ['MUJOCO_GL'] = 'egl'  # Use EGL for headless rendering
+
 def test_wandb_video_logging():
     """Test WandB video logging with a simple Fetch environment."""
     # Parse arguments
