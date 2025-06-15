@@ -1101,19 +1101,242 @@ These experiments will complete but without intermediate evaluation data. Final 
 - **Curriculum learning fails**: Progressive difficulty achieved only 26.5%
 - **Extreme overfitting problem**: All models reach 85%+ training reward but generalize poorly
 
-### Currently Running Experiments (2025-06-15_07:05 UTC)
+### Latest Experiment Results (2025-06-15_07:20 UTC)
 
-1. **ultra_diversity** - 64 generations per prompt for maximum variance
-   - Early results: 91.8% training reward at epoch 2.1
-   - Will evaluate if extreme diversity helps generalization
+1. **ultra_diversity_64gen** - Run ID: mpl1ksyv ❌
+   - **Training**: 50 epochs, 92.2% training reward
+   - **Standardized eval: 26.0%** (52/200 correct) - WORSE than baseline!
+   - 64 generations didn't help generalization
+   - High computational cost for negative results
 
-2. **weighted_sampling** - Oversample multiplication/subtraction
-   - At epoch 56.7, 77.3% training reward
-   - Addressing specific operation weaknesses
+2. **weighted_sampling** - Run ID: xaschqp8 ❌
+   - **Training**: 75 epochs, 78.1% training reward
+   - **Standardized eval: 21.0%** (42/200 correct) - WORST RESULT YET!
+   - Oversampling hard operations backfired completely
+   - Lower training reward and terrible generalization
 
-### Next Hypotheses
+## Comprehensive Results Summary (All Standardized Evaluation)
 
-1. **Early stopping is critical**: Best performance likely occurs before epoch 30
-2. **Model capacity**: Current 0.5B model may be too small for robust arithmetic
-3. **Dataset size**: 100-150 samples may be insufficient for generalization
-4. **Reward shaping**: Binary rewards may be too sparse - consider partial credit
+| Approach | Standardized Eval | Training Reward | Key Details |
+|----------|------------------|-----------------|-------------|
+| **Smaller Numbers (Best)** | 45.5% | 85.2% | 0-10 range, 75 epochs |
+| **Smaller Numbers Periodic** | 42.0% | 85.2% | Replication of best approach |
+| **Base Model** | ~38% | N/A | Qwen2-0.5B baseline |
+| **Progressive Difficulty** | 26.5% | 85.8% | Curriculum learning failed |
+| **Ultra Diversity (64 gen)** | 26.0% | 92.2% | Extreme diversity didn't help |
+| **Weighted Sampling** | 21.0% | 78.1% | Oversampling hard ops failed |
+| **Enhanced (32 gen)** | 16.5% | 88.7% | More epochs = worse results |
+
+### Critical Insights
+
+1. **Simple is better**: Basic 0-10 number training outperforms all sophisticated approaches
+2. **Overfitting is severe**: Training reward doesn't correlate with generalization
+3. **More training hurts**: 30-40 epochs optimal, 75+ epochs degrades performance
+4. **GRPO limitations**: May not be suitable for teaching arithmetic from scratch
+
+### Recommended Next Steps
+
+1. **Early Stopping**: Train for only 20-30 epochs and evaluate
+2. **Larger Model**: Try Qwen2-1.5B or 7B for better capacity
+3. **Different Algorithm**: Consider supervised fine-tuning first, then GRPO
+4. **Better Base Model**: Use a model already strong at math (e.g., DeepSeekMath)
+5. **Hybrid Approach**: Combine supervised learning with GRPO rewards
+
+## Early Stopping Experiment (2025-06-15_08:35 UTC)
+
+### Hypothesis
+Based on the observation that more training epochs lead to worse generalization (e.g., 80 epochs → 16.5% vs 30 epochs → 42%), implementing early stopping at 25 epochs should prevent overfitting and improve standardized evaluation performance.
+
+### Configuration
+- **Script**: `train_early_stopping.py`
+- **Max epochs**: 25 (vs 75 in baseline)
+- **Evaluation frequency**: Every 3 epochs
+- **Early stopping patience**: 2 evaluations without improvement
+- **Dataset**: 0-10 numbers (proven best approach)
+- **Save best model**: Automatically saves checkpoint at best evaluation accuracy
+- **Run ID**: Currently launching
+
+### Expected Outcomes
+- Should achieve 45-50% standardized evaluation accuracy
+- Training will likely stop between epochs 15-25
+- Best model checkpoint will be saved for future use
+- Will definitively answer if overfitting is the main issue
+
+### Results (Completed)
+- **Run ID**: ccuy65mu
+- **Final standardized evaluation**: **27.0%** (54/200 correct) ❌
+- **Training**: Ran for full 25 epochs (no early stopping triggered)
+- **Training reward**: 82.8% (good training performance)
+- **Breakdown by difficulty**:
+  - Very Easy (0-5): 40.0%
+  - Easy (0-10): 32.5%
+  - Medium (0-20): 24.0%
+  - Hard (10-50): 7.5%
+  - Very Hard (20-100): 35.0%
+- **By operation**: Division best (61.5%), others weak (15-27%)
+
+### Analysis
+The early stopping experiment **failed to improve results**:
+- Achieved only 27% accuracy, worse than our baseline (38%) and best result (45.5%)
+- The model trained for the full 25 epochs without triggering early stopping
+- This suggests the problem is not just overfitting but fundamental learning limitations
+- Even with careful training limits, the model struggles to generalize arithmetic
+
+### Key Insight
+Early stopping alone is not sufficient. The core issue appears to be that GRPO is not well-suited for teaching arithmetic from scratch to small language models.
+
+## Final Summary of All GRPO Arithmetic Experiments (2025-06-15)
+
+### Best Results on Standardized Evaluation (morgan/arithmetic_eval)
+
+| Rank | Approach | Eval Accuracy | Training Reward | Key Configuration |
+|------|----------|---------------|-----------------|-------------------|
+| 1 | **Smaller Numbers Retrain** | **45.5%** ✅ | 85.2% | 0-10 range, 75 epochs |
+| 2 | Smaller Numbers Periodic | 42.0% | 85.2% | 0-10 range, periodic eval |
+| 3 | Base Model (Qwen2-0.5B) | ~38% | N/A | Baseline performance |
+| 4 | Mixed Small Numbers Retrain | 31.0% | 59.2% | Mixed tasks, 100 epochs |
+| 5 | Early Stopping | 27.0% | 82.8% | 25 epochs max, patience=2 |
+| 6 | Progressive Difficulty | 26.5% | 85.8% | Curriculum learning |
+| 7 | Ultra Diversity (64 gen) | 26.0% | 92.2% | 64 generations per prompt |
+| 8 | Mixed Dataset Retrain | 24.0% | 88.3% | 50% arithmetic, 25% each other |
+| 9 | Weighted Sampling | 21.0% | 78.1% | Oversample hard operations |
+| 10 | Long Epochs (100) | 17.5% | 96.9% | Extended training |
+| 11 | Enhanced (80 epochs, 32 gen) | 16.5% | 88.7% | Most sophisticated approach |
+
+### Critical Discoveries
+
+1. **Simple approaches dominate**: Basic 0-10 number training (45.5%) beats all sophisticated methods
+2. **Severe generalization gap**: Models achieve 85-97% training reward but only 16-45% eval accuracy
+3. **More training hurts**: 100 epochs → 17.5%, while 75 epochs → 45.5%
+4. **Sophisticated methods fail**: Curriculum learning, weighted sampling, ultra-diversity all perform worse than baseline
+5. **Early stopping doesn't help**: 25 epochs achieved only 27%, suggesting fundamental learning limitations
+
+### Why GRPO Struggles with Arithmetic
+
+1. **Binary reward sparsity**: Only +1 or -1 rewards provide weak learning signal
+2. **High output space**: Even 0-10 arithmetic has 110+ possible answers
+3. **No partial credit**: Close answers (off by 1) get same -1 reward as garbage
+4. **Mode collapse risk**: Without KL penalty (beta=0.1), models output nonsense
+5. **Small model capacity**: Qwen2-0.5B may lack arithmetic reasoning ability
+
+### Successful Configuration (45.5% accuracy)
+
+```python
+# Best performing configuration
+model = "Qwen/Qwen2-0.5B-Instruct"
+dataset_range = "0-10"  # Smaller numbers crucial
+batch_size = 256
+num_generations = 16    # Must divide evenly into batch_size
+learning_rate = 5e-6
+temperature = 0.7
+epochs = 75            # Sweet spot - not too many!
+beta = 0.1             # KL penalty essential
+loss_type = "grpo"     # Not dr_grpo
+```
+
+### Failed Approaches Summary
+
+- **Curriculum Learning** (26.5%): Starting easy didn't help
+- **Ultra-high diversity** (26.0%): 64 generations provided no benefit
+- **Weighted sampling** (21.0%): Oversampling hard problems backfired
+- **Extended training** (17.5%): 100 epochs caused severe overfitting
+- **Early stopping** (27.0%): Limiting epochs didn't improve generalization
+
+### Recommendations for Future Work
+
+1. **Larger models**: Try Qwen2-1.5B or 7B for better capacity
+2. **Better base models**: Use models pre-trained on math (e.g., DeepSeekMath)
+3. **Hybrid approaches**: Supervised fine-tuning first, then GRPO
+4. **Different algorithms**: PPO with value networks might work better
+5. **Rich rewards**: Implement partial credit for close answers
+6. **Synthetic data**: Generate millions of examples for better coverage
+
+### Conclusion
+
+GRPO appears fundamentally limited for teaching arithmetic to small language models. Despite extensive experimentation with 15+ different approaches, we could not exceed 45.5% accuracy on a standardized evaluation set. The algorithm works best with simple configurations (0-10 numbers, 75 epochs) but even then falls short of practical utility. For arithmetic tasks, consider supervised fine-tuning or larger models as more promising alternatives.
+
+## BREAKTHROUGH: Rich Rewards Achieve 75% Accuracy! (2025-06-15_08:50 UTC)
+
+### Rich Reward Function Success 🎉
+
+After all sophisticated approaches failed, a simple change to the reward function achieved our best result:
+
+**Run ID**: kpsiof5z  
+**Script**: `train_grpo_rich_rewards.py`  
+**Final Results**:
+- **Standardized eval accuracy: 75.0%** (150/200 correct) - NEW RECORD!
+- **Training reward**: 78.4%
+- **Breakdown by difficulty**:
+  - Very Easy (0-5): 90.0% 
+  - Easy (0-10): 82.5%
+  - Medium (0-20): 72.0%
+  - Hard (10-50): 60.0%
+  - Very Hard (20-100): 75.0%
+- **By operation**: 
+  - Division: 92.3% (near perfect!)
+  - Addition: 88.0%
+  - Multiplication: 65.8%
+  - Subtraction: 56.1%
+
+### What Made the Difference: Graduated Rewards
+
+Instead of binary +1/-1 rewards, the rich reward function provides partial credit:
+
+```python
+def rich_reward_function(samples, prompts, answers):
+    # Reward scheme:
+    # Correct answer: +1.0
+    # Off by 1: +0.7
+    # Off by 2: +0.4  
+    # Off by 3-5: +0.1
+    # Off by 6-10: -0.2
+    # Off by >10: -0.5
+    # Non-numeric: -1.0
+```
+
+### Why Rich Rewards Succeeded
+
+1. **Learning signal density**: Model gets positive feedback for "almost correct" answers
+2. **Gradient information**: Being off by 1 is distinguished from being off by 100
+3. **Exploration encouragement**: Model can learn incrementally (5→4→3→correct)
+4. **Natural curriculum**: Easier to get partial credit first, then improve
+
+### Comparison with Previous Best
+
+| Metric | Simple Rewards (Best) | Rich Rewards | Improvement |
+|--------|---------------------|--------------|-------------|
+| Overall Accuracy | 45.5% | **75.0%** | +29.5% |
+| Very Easy (0-5) | 60.0% | 90.0% | +30.0% |
+| Division | 84.6% | 92.3% | +7.7% |
+| Training Epochs | 75 | 50 | -25 |
+
+### Key Configuration for 75% Success
+
+```python
+# Rich rewards configuration
+model = "Qwen/Qwen2-0.5B-Instruct"
+dataset_range = "0-10"  # Smaller numbers
+batch_size = 256
+num_generations = 16
+learning_rate = 5e-6
+temperature = 0.7
+epochs = 50  # Fewer epochs needed!
+beta = 0.1  # KL penalty still essential
+
+# The key difference: rich reward function
+reward_function = rich_reward_function  # Partial credit based on distance
+```
+
+### Implications
+
+1. **Reward engineering > model engineering**: Simple reward change outperformed all sophisticated approaches
+2. **GRPO can work**: With proper rewards, GRPO can teach arithmetic effectively
+3. **Partial credit crucial**: Binary rewards are too sparse for complex tasks
+4. **75% may not be the limit**: Further reward refinements could push higher
+
+### Next Steps with Rich Rewards
+
+1. **Extend to full number range**: Try 0-20 or 0-100 with rich rewards
+2. **Combine with other successes**: Rich rewards + mixed tasks
+3. **Fine-tune reward schedule**: Optimize the partial credit thresholds
+4. **Test on larger models**: Rich rewards + Qwen2-1.5B could reach 90%+

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Train PPO on Gymnasium-Robotics Fetch environments with video logging to W&B tables.
+Train PPO with GR00T N1.5 model on Gymnasium-Robotics Fetch environments.
 """
 
 import argparse
@@ -25,7 +25,7 @@ os.environ['MUJOCO_GL'] = 'osmesa'
 import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
-from algorithms.ppo_gr00t_v2 import PPOGr00tActorCriticV2
+from algorithms.gr00t_policy_wrapper import GR00TRLPolicy, GR00TRLPolicyLite
 from environments.fetch_wrapper import FetchGoalWrapper
 from environments.vec_isaac_env import make_vec_env, SubprocVecEnv, DummyVecEnv
 from utils.buffers import PPORolloutBuffer as RolloutBuffer
@@ -59,7 +59,7 @@ def make_fetch_env(env_id: str, idx: int, capture_video: bool, run_name: str,
         )
         
         if capture_video and idx == 0:
-            # Record every 5 episodes for better visibility during development
+            # Record every 5 episodes for better visibility
             env = gym.wrappers.RecordVideo(
                 env, f"videos/{run_name}",
                 episode_trigger=lambda episode_id: episode_id % 5 == 0,
@@ -73,10 +73,10 @@ def make_fetch_env(env_id: str, idx: int, capture_video: bool, run_name: str,
 
 
 def train(args):
-    """Main training loop for PPO with Fetch environments."""
-    run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+    """Main training loop for PPO with GR00T model."""
+    run_name = f"{args.env_id}__gr00t__{args.exp_name}__{args.seed}__{int(time.time())}"
     
-    # Setup WandB logging first
+    # Setup WandB logging
     if args.track and WANDB_AVAILABLE:
         wandb_run = wandb.init(
             project=args.wandb_project_name,
@@ -84,23 +84,19 @@ def train(args):
             config=vars(args),
             name=run_name,
             save_code=True,
-            tags=["gr00t-rl", "ppo", "fetch", args.env_id, args.reward_mode],
-            monitor_gym=False,  # We'll handle video logging manually
+            tags=["gr00t-rl", "ppo", "groot-model", args.env_id, args.reward_mode],
+            monitor_gym=False,
             mode="online"
         )
         # Define custom x-axis
         wandb.define_metric("global_step")
-        wandb.define_metric("episode_step")
         wandb.define_metric("*", step_metric="global_step")
         
-        # Create video table with INCREMENTAL mode for ongoing updates
+        # Create video table
         video_table = wandb.Table(
             columns=["global_step", "episode", "video", "episode_return", "episode_length", "success", "final_distance"],
             log_mode="INCREMENTAL"
         )
-        
-        # Track if we've logged any videos yet
-        videos_logged = False
         
     # Setup tensorboard writer
     writer = SummaryWriter(f"runs/{run_name}")
@@ -127,14 +123,43 @@ def train(args):
     else:
         envs = DummyVecEnv(env_fns)
     
-    # Create model
-    model = PPOGr00tActorCriticV2(
-        observation_space=envs.observation_space,
-        action_dim=envs.action_space.shape[0],
-        hidden_dims=(256, 256),
-        use_multimodal_encoder=False,
-        device=device
-    ).to(device)
+    # Create GR00T model
+    if args.use_groot_lite:
+        print("Using GR00T Lite model for testing...")
+        model = GR00TRLPolicyLite(
+            observation_space=envs.observation_space,
+            action_dim=envs.action_space.shape[0],
+            hidden_dims=(256, 256),
+            device=device
+        ).to(device)
+    else:
+        print(f"Loading GR00T model: {args.groot_model_path}...")
+        try:
+            model = GR00TRLPolicy(
+                model_name_or_path=args.groot_model_path,
+                action_dim=envs.action_space.shape[0],
+                device=device,
+                embodiment_tag=args.embodiment_tag,
+                freeze_vision=args.freeze_vision,
+                freeze_language=args.freeze_language,
+                add_value_head=True
+            ).to(device)
+            print("GR00T model loaded successfully!")
+        except Exception as e:
+            print(f"Failed to load GR00T model: {e}")
+            print("Falling back to GR00T Lite model...")
+            model = GR00TRLPolicyLite(
+                observation_space=envs.observation_space,
+                action_dim=envs.action_space.shape[0],
+                hidden_dims=(256, 256),
+                device=device
+            ).to(device)
+    
+    # Count parameters
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {total_params:,}")
+    print(f"Trainable parameters: {trainable_params:,}")
     
     optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, eps=1e-5)
     
@@ -158,11 +183,9 @@ def train(args):
     
     # Tracking for episodes
     episode_count = 0
-    env0_episode_count = 0  # Track episodes specifically for env 0
+    env0_episode_count = 0
     recent_episodes = deque(maxlen=100)
-    
-    # Video tracking
-    video_episode_tracker = {}  # Track which episodes have videos
+    video_episode_tracker = {}
     
     # Training loop
     num_updates = args.total_timesteps // args.batch_size
@@ -174,14 +197,13 @@ def train(args):
             lrnow = frac * args.learning_rate
             optimizer.param_groups[0]["lr"] = lrnow
         
-        # Lists to collect episode data during this update
-        update_episodes = []
-        
         # Collect rollout
+        update_episodes = []
+        videos_logged = False  # Reset for each update
+        
         for step in range(0, args.num_steps):
             global_step += args.num_envs
             
-            # Store current observation for this step
             obs = next_obs
             
             with torch.no_grad():
@@ -219,9 +241,7 @@ def train(args):
                     recent_episodes.append(episode_data)
                     update_episodes.append(episode_data)
                     
-                    # Track this episode for video checking
-                    if idx == 0:  # Only env 0 records videos
-                        # Track episodes for env 0 specifically
+                    if idx == 0:  # Track env 0 for videos
                         video_episode_tracker[env0_episode_count] = {
                             "global_step": global_step,
                             "episode_data": episode_data,
@@ -229,45 +249,40 @@ def train(args):
                         }
                         env0_episode_count += 1
                     
-                    # Log individual episode to tensorboard
+                    # Log individual episode
                     writer.add_scalar("charts/episodic_return", episode_data["episode_return"], global_step)
                     writer.add_scalar("charts/episodic_length", episode_data["episode_length"], global_step)
                     writer.add_scalar("charts/success_rate", episode_data["episode_success"], global_step)
                     writer.add_scalar("charts/final_distance", episode_data["episode_final_distance"], global_step)
                     
-                    # Log individual episode to WandB
                     if args.track and WANDB_AVAILABLE:
                         wandb.log({
                             **episode_data,
                             "global_step": global_step,
                         })
         
-        # Check for new videos after each rollout
+        # Check for new videos
         if args.track and WANDB_AVAILABLE and args.capture_video:
             video_dir = Path(f"videos/{run_name}")
             if video_dir.exists():
                 video_files = sorted(video_dir.glob("*.mp4"))
                 
+                # Debug logging
+                if video_files and update % 10 == 0:
+                    print(f"  Found {len(video_files)} video files")
+                    print(f"  Video tracker has {len(video_episode_tracker)} episodes")
+                
                 for video_file in video_files:
-                    # Extract episode number from filename (e.g., "episode-10.mp4" or "episode-episode-0.mp4" -> 0)
                     try:
-                        # Handle both "episode-0" and "episode-episode-0" formats
                         parts = video_file.stem.split('-')
                         episode_num = int(parts[-1])
                         
-                        # Debug logging
-                        print(f"Found video file: {video_file.name}, extracted episode: {episode_num}")
-                        print(f"Video tracker keys: {list(video_episode_tracker.keys())}")
-                        
-                        # Check if we have data for this episode and haven't logged it yet
                         if episode_num in video_episode_tracker and not video_episode_tracker[episode_num].get("logged", False):
                             ep_info = video_episode_tracker[episode_num]
                             ep_data = ep_info["episode_data"]
                             
-                            # Create video object
                             video_obj = wandb.Video(str(video_file), fps=30, format="mp4")
                             
-                            # Add row to incremental table
                             video_table.add_data(
                                 ep_info["global_step"],
                                 episode_num,
@@ -278,16 +293,13 @@ def train(args):
                                 ep_data["episode_final_distance"]
                             )
                             
-                            # Mark that we've added videos
                             videos_logged = True
-                            
-                            # Mark as logged
                             video_episode_tracker[episode_num]["logged"] = True
+                            print(f"  Added video for episode {episode_num} to table")
                             
-                            print(f"Added video for episode {episode_num} to table (global_step: {ep_info['global_step']})")
-                            
-                    except (ValueError, IndexError):
-                        # Skip files that don't match expected format
+                    except (ValueError, IndexError) as e:
+                        if update % 10 == 0:
+                            print(f"  Failed to process video {video_file}: {e}")
                         continue
         
         # Compute returns and advantages
@@ -301,7 +313,6 @@ def train(args):
             try:
                 rollout_data = next(buffer_output)
             except StopIteration as e:
-                # If StopIteration has a value, that's our data
                 if hasattr(e, 'value') and e.value is not None:
                     rollout_data = e.value
                 else:
@@ -309,10 +320,10 @@ def train(args):
         else:
             rollout_data = buffer_output
         
-        # Reset buffer for next rollout
+        # Reset buffer
         buffer.reset()
         
-        # Extract individual components
+        # Extract components
         b_obs = rollout_data['observations']
         b_actions = rollout_data['actions']
         b_logprobs = rollout_data['log_probs']
@@ -397,7 +408,7 @@ def train(args):
             recent_avg_length = 0.0
             recent_avg_distance = 0.0
         
-        # Create comprehensive metrics dict
+        # Log metrics
         metrics = {
             "learning_rate": optimizer.param_groups[0]["lr"],
             "value_loss": np.mean(v_losses),
@@ -415,7 +426,6 @@ def train(args):
             "total_episodes": episode_count,
         }
         
-        # Add episode statistics if we had any complete this update
         if update_episodes:
             metrics.update({
                 "update_episodes_completed": len(update_episodes),
@@ -423,18 +433,15 @@ def train(args):
                 "update_mean_success": np.mean([ep["episode_success"] for ep in update_episodes]),
             })
         
-        # Log all metrics to tensorboard
+        # Log to tensorboard
         for key, value in metrics.items():
             if key not in ["global_step", "update", "total_episodes"]:
                 writer.add_scalar(f"metrics/{key}", value, global_step)
         
-        # Log all metrics and tables to WandB
+        # Log to WandB
         if args.track and WANDB_AVAILABLE:
-            # Log the incremental video table only when we have new videos
             if videos_logged:
                 wandb.log({"video_table": video_table}, step=global_step)
-            
-            # Log all other metrics
             wandb.log(metrics, step=global_step)
         
         # Print progress
@@ -444,13 +451,8 @@ def train(args):
             print(f"  SPS: {metrics['SPS']}")
             print(f"  Recent Success Rate: {recent_success_rate:.2%}")
             print(f"  Recent Avg Return: {recent_avg_return:.3f}")
-            print(f"  Recent Avg Distance: {recent_avg_distance:.3f}")
             print(f"  Value Loss: {metrics['value_loss']:.4f}")
             print(f"  Policy Loss: {metrics['policy_loss']:.4f}")
-            print(f"  Entropy: {metrics['entropy']:.4f}")
-            print(f"  Approx KL: {metrics['approx_kl']:.4f}")
-            if update_episodes:
-                print(f"  Episodes this update: {len(update_episodes)}")
     
     # Save final model
     model_path = f"models/{run_name}.pt"
@@ -464,37 +466,23 @@ def train(args):
     }, model_path)
     print(f"\nModel saved to {model_path}")
     print(f"Final success rate: {recent_success_rate:.2%}")
-    print(f"Total episodes: {episode_count}")
     
-    # Final summary to WandB
     if args.track and WANDB_AVAILABLE:
         wandb.run.summary.update({
             "final_success_rate": recent_success_rate,
             "total_episodes": episode_count,
             "final_avg_return": recent_avg_return,
         })
-        
-        # Log final complete video table as IMMUTABLE
-        if hasattr(video_table, 'data') and video_table.data:
-            final_video_table = wandb.Table(
-                columns=video_table.columns,
-                data=video_table.data,
-                log_mode="IMMUTABLE"
-            )
-            wandb.log({"final_video_table": final_video_table})
-            print(f"\nLogged {len(video_table.data)} videos to final table")
+        wandb.finish()
     
     envs.close()
     writer.close()
-    
-    if args.track and WANDB_AVAILABLE:
-        wandb.finish()
 
 
 def main():
     parser = argparse.ArgumentParser()
     # Experiment arguments
-    parser.add_argument("--exp-name", type=str, default="ppo_fetch",
+    parser.add_argument("--exp-name", type=str, default="ppo_groot_fetch",
         help="the name of this experiment")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
@@ -511,6 +499,18 @@ def main():
     parser.add_argument("--capture-video", type=bool, default=True,
         help="whether to capture videos of the agent performances")
     
+    # GR00T model arguments
+    parser.add_argument("--groot-model-path", type=str, default="nvidia/GR00T-N1.5-3B",
+        help="Path or HuggingFace ID for GR00T model")
+    parser.add_argument("--use-groot-lite", type=bool, default=True,
+        help="Use lightweight model for testing (no GR00T required)")
+    parser.add_argument("--embodiment-tag", type=str, default="new_embodiment",
+        help="Embodiment tag for the robot")
+    parser.add_argument("--freeze-vision", type=bool, default=True,
+        help="Freeze vision encoder weights")
+    parser.add_argument("--freeze-language", type=bool, default=True,
+        help="Freeze language model weights")
+    
     # Algorithm arguments
     parser.add_argument("--env-id", type=str, default="FetchReach-v3",
         help="the id of the Fetch environment",
@@ -518,14 +518,14 @@ def main():
     parser.add_argument("--observation-mode", type=str, default="observation_goal",
         help="observation mode for the wrapper",
         choices=["observation", "observation_goal", "full"])
-    parser.add_argument("--reward-mode", type=str, default="sparse",
+    parser.add_argument("--reward-mode", type=str, default="dense",
         help="reward mode for the wrapper",
         choices=["sparse", "dense", "distance"])
-    parser.add_argument("--total-timesteps", type=int, default=1000000,
+    parser.add_argument("--total-timesteps", type=int, default=100000,
         help="total timesteps of the experiments")
     parser.add_argument("--learning-rate", type=float, default=3e-4,
         help="the learning rate of the optimizer")
-    parser.add_argument("--num-envs", type=int, default=8,
+    parser.add_argument("--num-envs", type=int, default=4,
         help="the number of parallel game environments")
     parser.add_argument("--num-steps", type=int, default=128,
         help="the number of steps to run in each environment per policy rollout")

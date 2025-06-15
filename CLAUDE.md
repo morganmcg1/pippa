@@ -686,10 +686,15 @@ os.environ['MUJOCO_GL'] = 'osmesa'
 env = gym.wrappers.RecordVideo(
     env, 
     video_folder="videos/run_name",
-    episode_trigger=lambda x: x % 10 == 0,  # Record every 10 episodes
+    episode_trigger=lambda x: x % 5 == 0,  # Record every 5 episodes for development
     disable_logger=True
 )
 ```
+
+**Video Recording Frequency Guidelines**:
+- Development/debugging: Every 1-5 episodes
+- Normal training: Every 10-50 episodes  
+- Long production runs: Every 100+ episodes
 
 Reference implementation: `gr00t-rl/scripts/train_ppo_fetch_with_video_table.py`
 
@@ -912,18 +917,69 @@ wandb.init(
 Key scripts for robotics training:
 - `gr00t-rl/scripts/train_ppo_fetch.py` - PPO training on Fetch tasks
 - `gr00t-rl/scripts/train_grpo_fetch.py` - GRPO training on Fetch tasks
+- `gr00t-rl/scripts/train_ppo_gr00t.py` - PPO with GR00T N1.5 model
 - `gr00t-rl/environments/fetch_wrapper.py` - Goal-conditioned wrapper
 
 Default configuration:
 - WandB tracking enabled by default (`--track=True`)
 - Video capture enabled by default (`--capture-video=True`)
-- Videos saved every 100 episodes
+- Videos saved every 5 episodes (optimized for development)
 - Support for sparse/dense/distance reward modes
 
-### Current Status (2025-06-15)
+### GR00T N1.5 Integration (2025-06-15)
+
+#### Overview
+GR00T N1.5 is NVIDIA's 3B parameter robot foundation model that combines vision, language, and action understanding. We've integrated it for RL training with PPO/GRPO.
+
+#### Key Components
+1. **GR00T Policy Wrapper** (`gr00t-rl/algorithms/gr00t_policy_wrapper.py`)
+   - `GR00TRLPolicy`: Full GR00T model wrapper for RL
+   - `GR00TRLPolicyLite`: Lightweight alternative for testing
+   - Handles actor-critic interface for PPO/GRPO
+   - Supports freezing vision/language components
+
+2. **Training Script** (`gr00t-rl/scripts/train_ppo_gr00t.py`)
+   - PPO training with GR00T model
+   - Supports both full and lite models
+   - Automatic fallback to lite model if GR00T unavailable
+
+3. **Setup Script** (`gr00t-rl/scripts/setup_isaac_groot.sh`)
+   - Installs Isaac-GR00T dependencies
+   - Sets up Python path
+   - Installs required transformers versions
+
+#### Usage
+
+**Quick Test (Lite Model)**:
+```bash
+python scripts/train_ppo_gr00t.py --use-groot-lite True --num-envs 4 --reward-mode dense
+```
+
+**Full GR00T Model**:
+```bash
+# First install Isaac-GR00T
+./scripts/setup_isaac_groot.sh
+
+# Then train with full model
+python scripts/train_ppo_gr00t.py \
+    --use-groot-lite False \
+    --groot-model-path nvidia/GR00T-N1.5-3B \
+    --freeze-vision True \
+    --freeze-language True
+```
+
+#### Model Architecture
+- **Backbone**: Eagle vision-language model
+- **Action Head**: Flow-matching diffusion model
+- **Parameters**: 3B total (can freeze vision/language)
+- **Compute**: Uses bfloat16 for efficiency
+
+#### Current Status (2025-06-15)
 
 - ✅ Gymnasium-Robotics integrated
-- ✅ WandB video logging configured
-- ✅ GRPO training runs successfully
-- ⚠️ PPO has minor buffer issues (generator vs dict)
-- 📝 Next: Integrate GR00T model as policy network
+- ✅ WandB video logging with tables
+- ✅ PPO/GRPO training runs successfully
+- ✅ GR00T Lite model integrated and tested
+- ✅ GR00T policy wrapper created
+- 🚧 Isaac-GR00T installation pending
+- 📝 Next: Load full GR00T N1.5 model for training
