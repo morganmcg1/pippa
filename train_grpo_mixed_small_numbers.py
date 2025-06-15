@@ -276,7 +276,8 @@ def main():
         logging_steps=1,
         gradient_accumulation_steps=1,
         save_strategy="steps",
-        save_steps=500,  # Save checkpoints for potential continuation
+        save_steps=250,  # Save every ~2.5 epochs (more frequent)
+        save_total_limit=2,  # Keep only 2 checkpoints to save space
         report_to="wandb",
         remove_unused_columns=False,
         log_completions=True,

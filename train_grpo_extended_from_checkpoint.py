@@ -332,9 +332,13 @@ def main():
         logging_steps=1,
         gradient_accumulation_steps=1,
         save_strategy="steps",
-        save_steps=1000,  # Save more frequently for analysis
+        save_steps=500,  # Save every 5 epochs for extended training
+        save_total_limit=3,  # Keep 3 checkpoints (more for analysis)
+        load_best_model_at_end=True,  # Load best model based on eval
+        metric_for_best_model="eval_reward",  # Track best by reward
+        greater_is_better=True,
         evaluation_strategy="steps",
-        eval_steps=2500,  # Evaluate every 25 epochs approximately
+        eval_steps=1000,  # Evaluate every 10 epochs
         report_to="wandb",
         remove_unused_columns=False,
         log_completions=True,

@@ -737,6 +737,24 @@ Based on the 54.7% breakthrough with mixed datasets and full diversity, here are
 2. **Extended Training**: The simplest path to improvement - just train the best model longer
 3. Both are low-risk, high-reward experiments that build directly on proven success
 
+### Experiments Launched (2025-06-15)
+
+#### 1. Mixed Dataset + Small Numbers - LAUNCHING
+**Script**: `train_grpo_mixed_small_numbers.py`
+- Combines mixed dataset approach with 0-10 number range
+- 100 epochs for extended training
+- WandB model checkpointing enabled
+- Saves every 250 steps (2.5 epochs), keeps 2 checkpoints
+
+#### 2. Extended Training - LAUNCHING  
+**Script**: `train_grpo_extended_from_checkpoint.py`
+- Continues from 54.7% baseline for 100 more epochs
+- Evaluates every 10 epochs to monitor overfitting
+- Saves best model based on eval_reward
+- Keeps 3 checkpoints for analysis
+
+Both experiments use WandB artifact logging (WANDB_LOG_MODEL=checkpoint) to enable model versioning and easy checkpoint loading.
+
 ## TRL GRPO log_completions Debugging (2025-06-15)
 **Issue**: AttributeError: 'Table' object has no attribute 'add_section' when log_completions=True
 

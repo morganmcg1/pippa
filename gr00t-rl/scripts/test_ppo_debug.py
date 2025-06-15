@@ -35,6 +35,8 @@ def test_single_env():
     model = PPOGr00tActorCriticV2(
         observation_space=env.observation_space,
         action_dim=act_dim,
+        use_multimodal_encoder=False,
+        hidden_dims=(64, 64),  # Smaller for testing
         device=device
     ).to(device)
     
@@ -52,7 +54,7 @@ def test_single_env():
     print(f"Actions shape: {actions.shape}")
     print(f"Values shape: {values.shape}")
     print(f"Log probs shape: {log_probs.shape}")
-    print(f"Entropy: {entropy.item()}")
+    print(f"Entropy: {entropy.item() if entropy.numel() == 1 else entropy.mean().item()}")
     
     print("✓ Single environment test passed!")
     
@@ -74,6 +76,8 @@ def test_vec_env():
     model = PPOGr00tActorCriticV2(
         observation_space=envs.observation_space,
         action_dim=envs.action_space.shape[0],
+        use_multimodal_encoder=False,
+        hidden_dims=(64, 64),  # Smaller for testing
         device=device
     ).to(device)
     
@@ -81,6 +85,8 @@ def test_vec_env():
     
     # Test forward pass
     obs = envs.reset()
+    if isinstance(obs, tuple):
+        obs = obs[0]  # New gym API returns (obs, info)
     print(f"Reset observation shape: {obs.shape}")
     
     obs_tensor = torch.from_numpy(obs).float().to(device)
@@ -91,7 +97,7 @@ def test_vec_env():
     print(f"Actions shape: {actions.shape}")
     print(f"Values shape: {values.shape}")
     print(f"Log probs shape: {log_probs.shape}")
-    print(f"Entropy: {entropy.item()}")
+    print(f"Entropy: {entropy.item() if entropy.numel() == 1 else entropy.mean().item()}")
     
     # Test step
     actions_np = actions.cpu().numpy()
