@@ -353,10 +353,32 @@ python train_gr00t_sft.py \
    --max-steps 10000 \
    --data-config so100_dualcam \
    --video-backend torchvision_av \
-   --batch-size 4 \
+   --batch-size 32 \  # Updated from 4 to blog default of 32
    --save-steps 1000 \
    --no-tune-diffusion-model  # CRITICAL
 ```
+
+### Full Training Run - 2025-06-15_22:49
+**Run ID**: 40cwx6du
+**Status**: 🟢 RUNNING
+**Configuration**:
+- Batch size: 32 (blog default, up from initial 4)
+- Learning rate: 1e-4
+- Max steps: 10,000
+- Dataset: Full SO-101 table cleanup (46,963 samples)
+- Total epochs: ~6.8 (with 1,468 batches per epoch)
+- GPU: H100 80GB (ubuntu@192.222.53.15)
+
+**Training Progress**:
+- Processing speed: ~1.19 iterations/second
+- Memory usage: ~28GB (35% of H100)
+- Expected completion: ~2.3 hours
+
+**Key Insights**:
+- Blog post uses batch_size=32 by default (not 4 as initially used)
+- With batch_size=32, model sees 320,000 samples over 10k steps
+- This represents ~6.8 passes through the full dataset
+- Stable training with good GPU utilization
 
 ## References
 - [GR00T N1.5 SO-101 Fine-tuning Tutorial](https://huggingface.co/blog/nvidia/gr00t-n1-5-so101-tuning) - Official NVIDIA blog post
