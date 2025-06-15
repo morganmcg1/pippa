@@ -99,15 +99,25 @@ class SubprocVecEnv:
         self.remotes[0].send(('get_spaces', None))
         self.observation_space, self.action_space = self.remotes[0].recv()
         
-    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[Dict]]:
+    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[Dict]]:
         """Step all environments in parallel."""
         for remote, action in zip(self.remotes, actions):
             remote.send(('step', action))
             
         results = [remote.recv() for remote in self.remotes]
-        obs, rewards, dones, infos = zip(*results)
         
-        return np.stack(obs), np.stack(rewards), np.stack(dones), list(infos)
+        # Handle both old (4-tuple) and new (5-tuple) Gym API
+        if len(results[0]) == 4:
+            # Old API: obs, reward, done, info
+            obs, rewards, dones, infos = zip(*results)
+            # Convert to new API: terminated = done, truncated = False
+            terminated = dones
+            truncated = [False] * len(dones)
+        else:
+            # New API: obs, reward, terminated, truncated, info
+            obs, rewards, terminated, truncated, infos = zip(*results)
+        
+        return np.stack(obs), np.stack(rewards), np.stack(terminated), np.stack(truncated), list(infos)
     
     def reset(self, **kwargs) -> Tuple[np.ndarray, List[Dict]]:
         """Reset all environments."""
@@ -175,16 +185,23 @@ class DummyVecEnv:
         self.observation_space = self.envs[0].observation_space
         self.action_space = self.envs[0].action_space
         
-    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[Dict]]:
+    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, List[Dict]]:
         """Step all environments sequentially."""
         results = []
         for env, action in zip(self.envs, actions):
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated or truncated
-            results.append((obs, reward, done, info))
+            result = env.step(action)
+            if len(result) == 4:
+                # Old API
+                obs, reward, done, info = result
+                terminated = done
+                truncated = False
+            else:
+                # New API
+                obs, reward, terminated, truncated, info = result
+            results.append((obs, reward, terminated, truncated, info))
             
-        obs, rewards, dones, infos = zip(*results)
-        return np.stack(obs), np.stack(rewards), np.stack(dones), list(infos)
+        obs, rewards, terminated, truncated, infos = zip(*results)
+        return np.stack(obs), np.stack(rewards), np.stack(terminated), np.stack(truncated), list(infos)
     
     def reset(self, **kwargs) -> Tuple[np.ndarray, List[Dict]]:
         """Reset all environments."""
