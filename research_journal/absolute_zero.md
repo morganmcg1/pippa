@@ -429,6 +429,32 @@ Our implementation was fundamentally wrong! The paper uses:
 - Model naturally gravitates toward tasks it can handle (deduction)
 - Need more iterations to see if harder tasks improve
 
+### Maximum GPU Utilization Run - 2025-06-15_22:36 - Run ID: meptbn6r
+**Status**: RUNNING 🔄
+**Configuration**:
+- Batch size: 192 (maximum for H100)
+- Iterations: 100
+- Seed buffer size: 128
+- Gradient accumulation: 1
+- num_generations: 16
+- WandB: https://wandb.ai/wild-ai/pippa/runs/meptbn6r
+
+**Implementation Enhancements**:
+- Added gradient accumulation support to train_absolute_zero_unified.py
+- Proper batch size calculation with gradient accumulation
+- Maximum GPU memory utilization (~73GB expected)
+
+**Early Observations** (Step 5/many):
+- Training successfully started with maximum batch size
+- Loss: 0.0017 (very low, good sign)
+- Reward: -0.899 (typical for early training)
+- Memory usage monitoring in progress
+
+This run will demonstrate:
+1. Whether curriculum learning emerges at scale
+2. If harder tasks (abduction/induction) improve with more iterations
+3. Maximum training throughput on H100
+
 ## References
 - [Absolute Zero Paper](https://arxiv.org/pdf/2505.03335v2)
 - [GRPO Baseline Results](./GRPO_baseline.md)

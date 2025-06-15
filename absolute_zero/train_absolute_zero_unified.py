@@ -649,7 +649,7 @@ def main():
             save_steps=1000,
             report_to="wandb",
             remove_unused_columns=False,
-            num_generations=4 if args.batch_size <= 16 else (8 if args.batch_size <= 32 else 16),  # Scale with batch size
+            num_generations=4 if args.batch_size <= 16 else (8 if args.batch_size <= 32 else (16 if args.batch_size <= 64 else (32 if args.batch_size <= 256 else 64))),  # Scale with batch size
             temperature=args.temperature,
             max_completion_length=64,
             max_prompt_length=256,
