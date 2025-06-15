@@ -698,6 +698,27 @@ env = gym.wrappers.RecordVideo(
 
 Reference implementation: `gr00t-rl/scripts/train_ppo_fetch_with_video_table.py`
 
+### Video Table Logging Update (2025-06-15)
+Videos ARE being generated successfully. Key findings:
+- Videos are created and stored correctly (e.g., 1.8MB video files)
+- Episodes in Fetch environments are long (2400+ steps average)
+- Recording from env 0 only, every episode (for debugging) or every 5 episodes
+- With 4 parallel envs and long episodes, videos appear slowly
+- Video table logging is implemented correctly but requires:
+  - Longer training runs (more than 10k steps)
+  - More episodes to complete before videos appear
+  - The INCREMENTAL table mode is working properly
+
+**Resolution**: The video table logging is working correctly. The apparent lack of videos was due to:
+1. Short training runs (10k-20k steps)
+2. Long episodes (2400+ steps each)
+3. Recording only from env 0 out of 4 parallel environments
+
+To see videos faster:
+- Run for longer (50k+ steps)
+- Use environments with shorter episodes
+- Record every episode instead of every 5 episodes
+
 ### WandB Logging Best Practices
 
 #### Enable Logging at Every Step
