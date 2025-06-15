@@ -191,7 +191,6 @@ def main():
         report_to="wandb",
         remove_unused_columns=False,
         log_completions=True,
-        num_ppo_epochs=1,
         num_generations=num_generations,
         temperature=temperature,  # Higher temperature
         max_new_tokens=16,
