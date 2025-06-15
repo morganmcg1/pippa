@@ -581,6 +581,10 @@ def main():
             print("No prompts generated, skipping iteration")
             continue
         
+        print(f"\n[DATASET] Created {len(all_prompts)} prompts")
+        print(f"Proposer prompts: {sum(1 for _, _, role in all_info if role == 'proposer')}")
+        print(f"Solver prompts: {sum(1 for _, _, role in all_info if role == 'solver')}")
+        
         # Step 3: Create dataset
         dataset = Dataset.from_dict({'prompt': all_prompts})
         
@@ -639,8 +643,13 @@ def main():
             return rewards
         
         # Step 5: Configure training
-        # Adjust batch size for gradient accumulation
-        per_device_batch = min(args.batch_size // args.gradient_accumulation_steps, len(dataset))
+        # Calculate num_generations first
+        num_generations = 4 if args.batch_size <= 16 else (8 if args.batch_size <= 32 else (16 if args.batch_size <= 64 else (32 if args.batch_size <= 256 else 64)))
+        
+        # GRPO requires: per_device_batch must be divisible by num_generations
+        # The actual batch size should be the total batch size, not divided by num_generations
+        # GRPO will internally handle the division
+        per_device_batch = args.batch_size // args.gradient_accumulation_steps
         
         config = GRPOConfig(
             output_dir=f"./absolute_zero_unified_iter_{iteration}",
@@ -652,7 +661,7 @@ def main():
             save_steps=1000,
             report_to="wandb",
             remove_unused_columns=False,
-            num_generations=4 if args.batch_size <= 16 else (8 if args.batch_size <= 32 else (16 if args.batch_size <= 64 else (32 if args.batch_size <= 256 else 64))),  # Scale with batch size
+            num_generations=num_generations,  # Use the pre-calculated value
             temperature=args.temperature,
             max_completion_length=64,
             max_prompt_length=256,
@@ -681,9 +690,12 @@ def main():
         
         print(f"\n[TRAINING] Single RL update with {len(dataset)} samples...")
         print(f"Starting from global step: {global_step}")
-        
-        # Get the number of training steps for this iteration
-        num_train_steps = len(dataset) // config.per_device_train_batch_size
+        print(f"Dataset size: {len(dataset)}")
+        print(f"Per device batch size: {per_device_batch}")
+        print(f"Num generations: {num_generations}")
+        print(f"Prompts per step: {per_device_batch // num_generations}")
+        print(f"Expected steps per epoch: {len(dataset) // (per_device_batch // num_generations)}")
+        print(f"Num train epochs: {config.num_train_epochs}")
         
         grpo_trainer.train()
         
