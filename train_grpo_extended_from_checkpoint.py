@@ -334,11 +334,8 @@ def main():
         save_strategy="steps",
         save_steps=500,  # Save every 5 epochs for extended training
         save_total_limit=3,  # Keep 3 checkpoints (more for analysis)
-        load_best_model_at_end=True,  # Load best model based on eval
-        metric_for_best_model="eval_reward",  # Track best by reward
-        greater_is_better=True,
-        evaluation_strategy="steps",
-        eval_steps=1000,  # Evaluate every 10 epochs
+        # Note: GRPOConfig doesn't support evaluation_strategy
+        # We'll do manual evaluation instead
         report_to="wandb",
         remove_unused_columns=False,
         log_completions=True,
