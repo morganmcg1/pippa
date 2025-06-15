@@ -171,7 +171,7 @@ def main():
     # Training configuration - MIXED DATASET
     n_samples = 150  # More samples for diversity
     batch_size = 64
-    num_generations = 16
+    num_generations = 4  # Must divide evenly into batch_size
     learning_rate = 5e-6
     temperature = 0.7
     epochs = 50
@@ -234,7 +234,7 @@ def main():
     # GRPO configuration
     config = GRPOConfig(
         output_dir="./grpo-arithmetic-mixed",
-        per_device_train_batch_size=batch_size // num_generations,
+        per_device_train_batch_size=batch_size,
         num_train_epochs=epochs,
         learning_rate=learning_rate,
         logging_steps=1,

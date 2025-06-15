@@ -123,7 +123,7 @@ def main():
     # Training configuration - HIGHER TEMPERATURE
     n_samples = 100
     batch_size = 64
-    num_generations = 16
+    num_generations = 4  # Must divide evenly into batch_size
     learning_rate = 5e-6
     temperature = 1.0  # INCREASED from 0.7 for more diversity
     epochs = 50
@@ -174,7 +174,7 @@ def main():
     # GRPO configuration with HIGHER TEMPERATURE
     config = GRPOConfig(
         output_dir="./grpo-arithmetic-higher-temp",
-        per_device_train_batch_size=batch_size // num_generations,
+        per_device_train_batch_size=batch_size,
         num_train_epochs=epochs,
         learning_rate=learning_rate,
         logging_steps=1,
