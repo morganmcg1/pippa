@@ -33,29 +33,9 @@ def main():
         log_mode="INCREMENTAL"
     )
     
-    # Create environment with video recording
-    env = gym.make("CartPole-v1", render_mode="rgb_array")
-    
-    # Wrapper to force short episodes for testing
-    class ShortEpisodeWrapper(gym.Wrapper):
-        def __init__(self, env, max_steps=50):
-            super().__init__(env)
-            self.max_steps = max_steps
-            self.step_count = 0
-        
-        def reset(self, **kwargs):
-            self.step_count = 0
-            return self.env.reset(**kwargs)
-        
-        def step(self, action):
-            obs, reward, terminated, truncated, info = self.env.step(action)
-            self.step_count += 1
-            if self.step_count >= self.max_steps:
-                truncated = True
-            return obs, reward, terminated, truncated, info
-    
-    # Wrap for short episodes
-    env = ShortEpisodeWrapper(env, max_steps=50)
+    # Create a simple Fetch environment
+    import gymnasium_robotics
+    env = gym.make("FetchReach-v3", render_mode="rgb_array", max_episode_steps=50)
     
     # Setup video recording
     video_dir = Path(f"videos/proof_{int(time.time())}")
@@ -83,6 +63,7 @@ def main():
         
         done = False
         while not done:
+            # Fetch uses dict action space
             action = env.action_space.sample()
             obs, reward, terminated, truncated, info = env.step(action)
             episode_return += reward
