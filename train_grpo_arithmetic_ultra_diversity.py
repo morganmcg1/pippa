@@ -160,6 +160,7 @@ class MixedTaskRewardWrapper:
     
     def __init__(self, dataset: Dataset):
         self.dataset = dataset
+        self.__name__ = "MixedTaskRewardWrapper"
         
     def __call__(self, completions: List[str], prompts: List[str], 
                  outputs: List[str], **kwargs) -> List[float]:
