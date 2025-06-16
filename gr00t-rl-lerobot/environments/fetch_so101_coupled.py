@@ -6,11 +6,15 @@ effectively reducing the 7-DoF Fetch arm to match SO-101's 6-DoF configuration.
 """
 
 import gymnasium as gym
+import gymnasium_robotics
 import numpy as np
 from gymnasium import spaces
 from typing import Dict, Any, Optional, Tuple
 import cv2
 from pathlib import Path
+
+# Register gymnasium_robotics environments
+gym.register_envs(gymnasium_robotics)
 
 
 class FetchSO101CoupledWrapper(gym.Wrapper):

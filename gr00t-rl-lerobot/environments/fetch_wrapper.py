@@ -13,9 +13,13 @@ For joint-level coupling, see fetch_so101_coupled.py.
 """
 
 import gymnasium as gym
+import gymnasium_robotics
 import numpy as np
 from typing import Dict, Tuple, Any, Optional
 import cv2
+
+# Register gymnasium_robotics environments
+gym.register_envs(gymnasium_robotics)
 
 
 class FetchToSO101Wrapper(gym.Wrapper):
@@ -30,7 +34,7 @@ class FetchToSO101Wrapper(gym.Wrapper):
     
     def __init__(
         self,
-        env_id: str = "FetchPickAndPlace-v3",
+        env_id: str = "FetchPickAndPlaceDense-v3",
         render_mode: str = "rgb_array",
         max_episode_steps: int = 50,
         camera_resolution: Tuple[int, int] = (224, 224),

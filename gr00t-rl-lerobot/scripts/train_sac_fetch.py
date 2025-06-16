@@ -308,7 +308,7 @@ def main(
     config = {
         "env_type": env_type,
         "use_joint_space": use_joint_space,
-        "env_id": "FetchPickAndPlace-v3",
+        "env_id": "FetchPickAndPlaceDense-v3",
         "max_episode_steps": 50,
         "total_timesteps": 100000,
         "learning_rate": 3e-4,

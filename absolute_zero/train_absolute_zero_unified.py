@@ -530,7 +530,7 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
                 for i in range(min(2, len(buffer))):
                     try:
                         task = buffer.sample(1)[0]
-                        prompt = trainer.create_solver_prompt(task_type, task)
+                        prompt = trainer.create_solver_prompt(task, task_type)
                         
                         # Generate completion
                         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(model.device)
@@ -565,11 +565,14 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
     
     # Log the table with the current global step
     try:
-        # Method 1: Log table with step (this should work)
-        wandb.log({"training_samples": samples_table}, step=global_step, commit=False)
+        # Method 1: Log table with step using run.log() as per docs
+        wandb.run.log({"training_samples": samples_table}, step=global_step, commit=True)
         print(f"[TABLE LOGGING] Successfully logged table with {len(samples_table.data)} rows at step {global_step}")
         
-        # Method 2: Also save as artifact for redundancy
+        # Method 2: Also add to summary to ensure visibility
+        wandb.run.summary[f"training_samples_iter_{iteration}"] = samples_table
+        
+        # Method 3: Also save as artifact for redundancy
         if len(samples_table.data) > 0:
             table_artifact = wandb.Artifact(
                 name=f"training_samples_iter_{iteration}",
@@ -727,8 +730,11 @@ def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: Un
                             True  # N/A for solver - always valid attempt
                         )
             
-            # Log the table with global step
-            wandb.log({table_name: table}, step=state.global_step)
+            # Log the table with global step using run.log() as per docs
+            wandb.run.log({table_name: table}, step=state.global_step, commit=True)
+            
+            # Also add to summary for visibility
+            wandb.run.summary[f"{table_name}_epoch_{self.epoch_count}"] = table
             model.train()
     
     return EpochSampleLogger()

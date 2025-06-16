@@ -578,5 +578,58 @@ python train_absolute_zero_unified.py \
 - [GRPO Baseline Results](./GRPO_baseline.md)
 - Best GRPO config: train_grpo_arithmetic_fixed_completions.py
 
+### Table Logging Fix with commit=True - 2025-06-16_04:40
+**Run IDs**: 
+- oy9jnpkt (commit_true_test - failed due to solver prompt bug)
+- y69aeesr (commit_true_fixed - fixed solver prompt ordering)
+- 9cokphro (direct_table_test - quick verification)
+- g3jqip6a (test_commit_true_tables - local test confirming commit=True requirement)
+
+**Key Finding**: Tables require `commit=True` to appear in WandB UI
+
+**Changes Made**:
+1. Updated all `wandb.log()` calls for tables to use `commit=True`
+2. Fixed solver prompt argument ordering bug: `create_solver_prompt(task, task_type)` not `create_solver_prompt(task_type, task)`
+3. Confirmed artifact logging continues to work as backup
+
+**Why commit=True is needed**:
+- The user correctly identified that we don't care about WandB's internal step counter
+- We track our own global_step for training coordination
+- Using `commit=True` forces WandB to immediately commit the table data
+- Without it, tables may be buffered and not appear in the UI
+
+**Status**: Tables should now appear in WandB UI with the commit=True fix. Artifacts continue to work as a redundant backup method.
+
+### Table Logging Complete Fix - 2025-06-16_05:00
+**Run IDs**: 
+- ziughrsy (test_run_log_method - testing wandb.run.log())
+- d1zmzmi7 (final_table_test - comprehensive fix)
+
+**Critical Fixes Applied**:
+1. Use `wandb.run.log()` instead of `wandb.log()` (per WandB docs)
+2. Keep `commit=True` to force immediate upload
+3. Add tables to `wandb.run.summary` for guaranteed visibility
+4. Ensure `wandb.finish()` is called (already was)
+
+**Complete Table Logging Pattern**:
+```python
+# Log table with run.log()
+wandb.run.log({"table_name": table}, step=global_step, commit=True)
+
+# Also add to summary for visibility
+wandb.run.summary["table_name"] = table
+
+# Optionally save as artifact for redundancy
+artifact = wandb.Artifact("name", type="dataset")
+artifact.add(table, "table_name")
+wandb.run.log_artifact(artifact)
+```
+
+**Key Insights**:
+- Tables need to be logged with `wandb.run.log()` not `wandb.log()`
+- Adding to summary ensures tables appear in the UI
+- The log_mode warning about IMMUTABLE tables can be ignored for our use case
+- We create fresh tables each iteration, so mutability isn't an issue
+
 ---
 *This journal will be updated as experiments progress.*
