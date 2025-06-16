@@ -11,8 +11,8 @@ Key features:
 """
 
 import torch
-from datasets import Dataset
-from transformers import AutoTokenizer, AutoModelForCausalLM, TrainerCallback, TrainerState, TrainerControl
+from datasets import Dataset, load_dataset
+from transformers import AutoTokenizer, AutoModelForCausalLM, TrainerCallback, TrainerState, TrainerControl, TrainingArguments
 from trl import GRPOConfig, GRPOTrainer
 import random
 import numpy as np
@@ -386,6 +386,192 @@ class UnifiedAbsoluteZeroTrainer:
             return -1.0
         
         return -1.0
+    
+    def evaluate_on_arithmetic_eval(self, model, num_samples: int = 200) -> float:
+        """Evaluate model on morgan/arithmetic_eval dataset."""
+        # Load evaluation dataset
+        eval_dataset = load_dataset("morgan/arithmetic_eval")
+        # Handle both dict and direct dataset cases
+        if hasattr(eval_dataset, 'keys'):
+            # It's a DatasetDict, get the first split
+            split_name = list(eval_dataset.keys())[0]
+            eval_dataset = eval_dataset[split_name]
+        
+        # Sample if needed
+        if num_samples < len(eval_dataset):
+            indices = random.sample(range(len(eval_dataset)), num_samples)
+            eval_samples = [eval_dataset[i] for i in indices]
+        else:
+            eval_samples = list(eval_dataset)
+        
+        model.eval()
+        correct = 0
+        
+        with torch.no_grad():
+            for sample in eval_samples:
+                # Use prompt from dataset
+                prompt = sample['prompt']
+                
+                # Generate completion
+                inputs = self.tokenizer(prompt, return_tensors="pt").to(model.device)
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=10,
+                    temperature=0.1,  # Low temperature for deterministic eval
+                    do_sample=True,
+                    pad_token_id=self.tokenizer.pad_token_id
+                )
+                
+                # Extract answer
+                generated = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+                completion = generated[len(prompt):].strip()
+                
+                # Check if correct
+                match = re.search(r'-?\d+', completion)
+                if match and match.group() == sample['answer']:
+                    correct += 1
+        
+        model.train()
+        accuracy = correct / len(eval_samples)
+        return accuracy
+
+
+class PeriodicEvaluationCallback(TrainerCallback):
+    """Periodically evaluate on arithmetic_eval dataset."""
+    
+    def __init__(self, trainer: UnifiedAbsoluteZeroTrainer, eval_steps: int = 10):
+        self.trainer = trainer
+        self.eval_steps = eval_steps
+        self.last_eval_step = -1
+    
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Evaluate every eval_steps."""
+        if state.global_step % self.eval_steps == 0 and state.global_step != self.last_eval_step:
+            self.last_eval_step = state.global_step
+            model = kwargs.get('model')
+            if model is not None:
+                accuracy = self.trainer.evaluate_on_arithmetic_eval(model)
+                wandb.log({
+                    "eval/arithmetic_eval": accuracy
+                }, step=state.global_step)
+                print(f"\n[EVAL] Step {state.global_step}: Arithmetic eval accuracy = {accuracy:.2%}")
+
+
+def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, iteration: int, global_step: int):
+    """Log sample tables for monitoring training progress."""
+    table = wandb.Table(columns=[
+        "iteration", "global_step", "task_type", "role",
+        "prompt", "generation", "result", "is_valid"
+    ])
+    
+    model.eval()
+    with torch.no_grad():
+        # Log 2 samples for each task type and role
+        for task_type in ['deduction', 'abduction', 'induction']:
+            # Get appropriate buffer
+            if task_type == 'deduction':
+                buffer = trainer.deduction_buffer
+                few_shot_size = 4
+            elif task_type == 'abduction':
+                buffer = trainer.abduction_buffer
+                few_shot_size = 4
+            else:
+                buffer = trainer.induction_buffer
+                few_shot_size = 2
+            
+            if len(buffer) < few_shot_size:
+                continue
+            
+            # Generate 2 proposer samples
+            for _ in range(2):
+                buffer_samples = buffer.sample(few_shot_size)
+                prompt = trainer.create_proposer_prompt(task_type, buffer_samples)
+                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=64,
+                    temperature=1.0,
+                    do_sample=True,
+                    pad_token_id=tokenizer.pad_token_id
+                )
+                generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                completion = generated[len(prompt):].strip()
+                
+                # Parse and validate
+                parsed_task = trainer.parse_proposer_generation(completion, task_type)
+                is_valid = parsed_task is not None
+                
+                table.add_data(
+                    iteration,
+                    global_step,
+                    task_type,
+                    "proposer",
+                    prompt[:100] + "...",  # Truncate long prompts
+                    completion[:100],  # Truncate long completions
+                    str(parsed_task)[:50] if parsed_task else "Invalid",
+                    is_valid
+                )
+            
+            # Generate 2 solver samples if we have tasks
+            if len(buffer) > 0:
+                for _ in range(min(2, len(buffer))):
+                    task = buffer.sample(1)[0]
+                    prompt = trainer.create_solver_prompt(task_type, task)
+                    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                    outputs = model.generate(
+                        **inputs,
+                        max_new_tokens=32,
+                        temperature=0.7,
+                        do_sample=True,
+                        pad_token_id=tokenizer.pad_token_id
+                    )
+                    generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                    completion = generated[len(prompt):].strip()
+                    
+                    # Parse solver result
+                    result = trainer.parse_solver_completion(completion, task_type, task)
+                    is_correct = result == task.get('answer')
+                    
+                    table.add_data(
+                        iteration,
+                        global_step,
+                        task_type,
+                        "solver",
+                        prompt[:100] + "...",
+                        completion[:100],
+                        f"Answer: {result}, Correct: {is_correct}",
+                        is_correct
+                    )
+    
+    # Log the table
+    wandb.log({"samples": table}, step=global_step)
+    model.train()
+
+
+class GlobalStepManager(TrainerCallback):
+    """Manages global step across iterations to prevent overwrites."""
+    
+    def __init__(self, initial_global_step: int = 0):
+        self.target_global_step = initial_global_step
+        self.last_logged_step = initial_global_step
+    
+    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Set the initial global step when training begins."""
+        if self.target_global_step > 0:
+            state.global_step = self.target_global_step
+            # Update logging tracker
+            if hasattr(kwargs.get('model'), '_globalstep_last_logged'):
+                kwargs['model']._globalstep_last_logged = self.target_global_step
+    
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """Ensure global step is preserved."""
+        # Track the actual step progression
+        if state.global_step > self.last_logged_step:
+            self.last_logged_step = state.global_step
+    
+    def get_final_step(self) -> int:
+        """Get the final global step after training."""
+        return self.last_logged_step
 
 
 def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: UnifiedAbsoluteZeroTrainer):
@@ -513,6 +699,7 @@ def main():
     parser.add_argument("--quick-test", action="store_true", help="Quick test mode")
     parser.add_argument("--name-suffix", type=str, default="", help="Suffix for run name")
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1, help="Gradient accumulation steps")
+    parser.add_argument("--eval-steps", type=int, default=10, help="Evaluate every N steps")
     
     args = parser.parse_args()
     
@@ -539,9 +726,14 @@ def main():
             "learning_rate": args.learning_rate,
             "temperature": args.temperature,
             "beta": args.beta,
+            "eval_steps": args.eval_steps,
             "algorithm": "absolute_zero_unified"
         }
     )
+    
+    # Define metrics to use global_step as x-axis to prevent step warnings
+    wandb.define_metric("train/global_step")
+    wandb.define_metric("*", step_metric="train/global_step")
     
     print("\n" + "="*60)
     print("ABSOLUTE ZERO UNIFIED IMPLEMENTATION")
@@ -558,6 +750,14 @@ def main():
     
     # Phase 1: Seeding (no gradients)
     trainer.seed_buffers(batch_size=args.batch_size, buffer_size=args.seed_buffer_size)
+    
+    # Initial evaluation
+    print("\n[EVAL] Initial evaluation on arithmetic_eval dataset...")
+    initial_accuracy = trainer.evaluate_on_arithmetic_eval(trainer.model)
+    wandb.log({
+        "eval/arithmetic_eval": initial_accuracy
+    }, step=0)
+    print(f"Initial arithmetic eval accuracy: {initial_accuracy:.2%}")
     
     # Track global step across iterations
     global_step = 0
@@ -710,12 +910,21 @@ def main():
         )
         
         # Step 6: Single GRPO update
+        # Create callbacks
+        step_manager = GlobalStepManager(initial_global_step=global_step)
+        eval_callback = PeriodicEvaluationCallback(trainer, eval_steps=args.eval_steps)
+        callbacks = [
+            step_manager,
+            eval_callback,
+            create_epoch_sample_logger('unified', iteration + 1, trainer.tokenizer, trainer)
+        ]
+        
         grpo_trainer = GRPOTrainer(
             model=trainer.model,
             args=config,
             train_dataset=dataset,
             reward_funcs=[combined_reward_function],
-            callbacks=[create_epoch_sample_logger('unified', iteration + 1, trainer.tokenizer, trainer)]
+            callbacks=callbacks
         )
         
         # Set the global step to continue from previous iteration
@@ -723,6 +932,8 @@ def main():
             grpo_trainer.state.global_step = global_step
             # Also need to update the underlying transformers trainer state
             grpo_trainer._globalstep_last_logged = global_step
+            # Force the trainer to start from the correct epoch
+            grpo_trainer.state.epoch = global_step / max(1, len(dataset) // (per_device_batch // num_generations))
         
         print(f"\n[TRAINING] Single RL update with {len(dataset)} samples...")
         print(f"Starting from global step: {global_step}")
@@ -736,7 +947,8 @@ def main():
         grpo_trainer.train()
         
         # Update global step for next iteration
-        global_step = grpo_trainer.state.global_step
+        # Use the step manager's tracked value to ensure consistency
+        global_step = step_manager.get_final_step()
         print(f"Ending at global step: {global_step}")
         
         # Log metrics with proper global step
@@ -746,6 +958,10 @@ def main():
             "buffer_sizes/abduction": len(trainer.abduction_buffer),
             "buffer_sizes/induction": len(trainer.induction_buffer),
         }, step=global_step)
+        
+        # Force log tables after each iteration for quick runs
+        print(f"\n[LOGGING] Creating and logging sample tables for iteration {iteration + 1}...")
+        log_sample_tables(trainer, trainer.model, trainer.tokenizer, iteration + 1, global_step)
         
         # Log baseline statistics
         for key, values in trainer.baselines.baselines.items():
@@ -760,6 +976,15 @@ def main():
         print(f"Buffer sizes - Deduction: {len(trainer.deduction_buffer)}, "
               f"Abduction: {len(trainer.abduction_buffer)}, "
               f"Induction: {len(trainer.induction_buffer)}")
+    
+    # Final evaluation
+    print("\n[EVAL] Final evaluation on arithmetic_eval dataset...")
+    final_accuracy = trainer.evaluate_on_arithmetic_eval(trainer.model)
+    wandb.log({
+        "eval/arithmetic_eval": final_accuracy
+    }, step=global_step)
+    print(f"Final arithmetic eval accuracy: {final_accuracy:.2%}")
+    print(f"Improvement: {initial_accuracy:.2%} → {final_accuracy:.2%} ({(final_accuracy - initial_accuracy)*100:+.1f}pp)")
     
     wandb.finish()
     print("\n" + "="*60)
