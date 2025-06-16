@@ -530,6 +530,15 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
                 for i in range(min(2, len(buffer))):
                     try:
                         task = buffer.sample(1)[0]
+                        
+                        # Debug: print task structure
+                        print(f"[TABLE LOGGING DEBUG] Task keys for {task_type}: {list(task.keys())}")
+                        
+                        # Skip if task is missing required fields
+                        if 'expression' not in task and 'answer' not in task and 'pattern' not in task:
+                            print(f"[TABLE LOGGING] Skipping invalid task for {task_type}")
+                            continue
+                            
                         prompt = trainer.create_solver_prompt(task, task_type)
                         
                         # Generate completion
@@ -544,10 +553,9 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
                         generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
                         completion = generated[len(prompt):].strip()
                         
-                        # Parse result
-                        result = trainer.parse_solver_completion(completion, task_type, task)
-                        is_correct = result == task.get('answer')
-                        reward = 1.0 if is_correct else -1.0
+                        # Evaluate solver response
+                        reward = trainer.evaluate_solver_response(completion, task, task_type)
+                        is_correct = reward > 0
                         
                         samples_table.add_data(
                             iteration,
@@ -562,6 +570,8 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
                         print(f"[TABLE LOGGING] Added {task_type} solver sample {i+1}")
                     except Exception as e:
                         print(f"[TABLE LOGGING] Error generating {task_type} solver sample: {e}")
+                        import traceback
+                        traceback.print_exc()
     
     # Log the table with the current global step
     try:
@@ -602,30 +612,7 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
     model.train()
 
 
-class GlobalStepManager(TrainerCallback):
-    """Manages global step across iterations to prevent overwrites."""
-    
-    def __init__(self, initial_global_step: int = 0):
-        self.target_global_step = initial_global_step
-        self.last_logged_step = initial_global_step
-    
-    def on_train_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        """Set the initial global step when training begins."""
-        if self.target_global_step > 0:
-            state.global_step = self.target_global_step
-            # Update logging tracker
-            if hasattr(kwargs.get('model'), '_globalstep_last_logged'):
-                kwargs['model']._globalstep_last_logged = self.target_global_step
-    
-    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        """Ensure global step is preserved."""
-        # Track the actual step progression
-        if state.global_step > self.last_logged_step:
-            self.last_logged_step = state.global_step
-    
-    def get_final_step(self) -> int:
-        """Get the final global step after training."""
-        return self.last_logged_step
+# GlobalStepManager removed - let each trainer manage its own steps to avoid conflicts
 
 
 def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: UnifiedAbsoluteZeroTrainer):
@@ -972,10 +959,8 @@ def main():
         
         # Step 6: Single GRPO update
         # Create callbacks
-        step_manager = GlobalStepManager(initial_global_step=global_step)
         eval_callback = PeriodicEvaluationCallback(trainer, eval_steps=args.eval_steps)
         callbacks = [
-            step_manager,
             eval_callback,
             create_epoch_sample_logger('unified', iteration + 1, trainer.tokenizer, trainer)
         ]
@@ -1008,8 +993,7 @@ def main():
         grpo_trainer.train()
         
         # Update global step for next iteration
-        # Use the step manager's tracked value to ensure consistency
-        global_step = step_manager.get_final_step()
+        global_step = grpo_trainer.state.global_step
         print(f"Ending at global step: {global_step}")
         
         # Log metrics with proper global step
