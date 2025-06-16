@@ -118,13 +118,18 @@ This ensures we can reconstruct the timeline of experiments and cross-reference 
 ### H100 Machine Access
 Current H100 machines:
 - `ubuntu@192.222.52.59` (Original - for GRPO and Absolute Zero experiments)
-- `ubuntu@192.222.53.15` (New - **ONLY for GR00T SFT experiments**)
+- `ubuntu@192.222.53.15` (New - for GR00T SFT and GR00T RL experiments)
 
-**IMPORTANT**: GR00T SFT experiments MUST be run on `ubuntu@192.222.53.15` only. This server has:
+**IMPORTANT**: 
+- GR00T SFT experiments MUST be run on `ubuntu@192.222.53.15`
+- GR00T RL experiments (with LeRobot) also use `ubuntu@192.222.53.15`
+
+This server has:
 - 4x H100 80GB GPUs
 - Isaac-GR00T environment properly configured
 - Required datasets at `~/pippa/datasets/`
-- Virtual environment at `~/pippa/Isaac-GR00T/sft_venv`
+- Virtual environment at `~/pippa/Isaac-GR00T/sft_venv` (for SFT)
+- Virtual environment at `~/pippa/lerobot_venv` (for RL experiments)
 
 Always:
 1. Check GPU availability with `nvidia-smi`

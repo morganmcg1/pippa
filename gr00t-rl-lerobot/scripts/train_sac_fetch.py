@@ -17,6 +17,7 @@ from tqdm import tqdm
 import json
 
 from environments.fetch_wrapper import make_fetch_so101_env
+from environments.fetch_so101_coupled import make_fetch_so101_coupled_env
 from policies.gr00t_policy import GR00TPolicy, GR00TConfig
 
 
@@ -293,10 +294,20 @@ class SACTrainer:
         }
 
 
-def main():
-    """Main training loop."""
+def main(
+    env_type: str = "cartesian",  # "cartesian" or "coupled"
+    use_joint_space: bool = False,
+):
+    """Main training loop.
+    
+    Args:
+        env_type: Type of environment wrapper to use
+        use_joint_space: Whether to use joint-space actions (only for coupled)
+    """
     # Configuration
     config = {
+        "env_type": env_type,
+        "use_joint_space": use_joint_space,
         "env_id": "FetchPickAndPlace-v3",
         "max_episode_steps": 50,
         "total_timesteps": 100000,
@@ -305,7 +316,7 @@ def main():
         "eval_frequency": 5000,
         "save_frequency": 10000,
         "wandb_project": "pippa",
-        "wandb_tags": ["gr00t-rl-lerobot", "sac", "fetch"],
+        "wandb_tags": ["gr00t-rl-lerobot", "sac", "fetch", f"env-{env_type}"],
     }
     
     # Initialize WandB
@@ -313,14 +324,24 @@ def main():
         project=config["wandb_project"],
         tags=config["wandb_tags"],
         config=config,
-        name=f"gr00t-sac-fetch-{wandb.util.generate_id()}",
+        name=f"gr00t-sac-fetch-{env_type}-{wandb.util.generate_id()}",
     )
     
-    # Create environment
-    env = make_fetch_so101_env(
-        env_id=config["env_id"],
-        max_episode_steps=config["max_episode_steps"],
-    )
+    # Create environment based on type
+    if env_type == "coupled":
+        env = make_fetch_so101_coupled_env(
+            env_id=config["env_id"],
+            max_episode_steps=config["max_episode_steps"],
+            use_joint_space=use_joint_space,
+            couple_joints=True,
+        )
+        print(f"Using coupled environment with {'joint' if use_joint_space else 'Cartesian'} actions")
+    else:
+        env = make_fetch_so101_env(
+            env_id=config["env_id"],
+            max_episode_steps=config["max_episode_steps"],
+        )
+        print("Using Cartesian-only environment")
     
     # Create policy
     policy_config = GR00TConfig()
@@ -373,4 +394,20 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser(description="Train GR00T with SAC on Fetch")
+    parser.add_argument(
+        "--env-type", 
+        type=str, 
+        default="cartesian",
+        choices=["cartesian", "coupled"],
+        help="Environment type: cartesian (7-DoF hidden) or coupled (6-DoF sim)"
+    )
+    parser.add_argument(
+        "--use-joint-space",
+        action="store_true",
+        help="Use joint-space actions (only for coupled env)"
+    )
+    args = parser.parse_args()
+    
+    main(env_type=args.env_type, use_joint_space=args.use_joint_space)
