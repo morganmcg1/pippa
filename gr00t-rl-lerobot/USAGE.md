@@ -79,13 +79,29 @@ model, components = loader.load_for_rl(
 )
 ```
 
-## Current Limitations
+## Current Status: Actual GR00T Model Integrated! ✅
 
-### 1. Placeholder Networks
-The current implementation uses dummy networks instead of the actual GR00T model because:
-- Loading real GR00T requires Isaac-GR00T repository
-- Diffusion action head implementation is complex
-- Would need NVIDIA model access permissions
+The implementation now loads and uses your actual fine-tuned GR00T model from WandB. The policy automatically:
+- Downloads your checkpoint from `wild-ai/pippa/gr00t-sft-so100_dualcam-bs32:v0`
+- Loads the fine-tuned action head weights
+- Converts between Fetch and GR00T observation formats
+- Uses the real diffusion action head for predictions
+
+### Testing the Integration
+
+Run the comprehensive test script:
+```bash
+cd scripts
+python test_groot_integration.py
+```
+
+This will:
+1. Load your fine-tuned GR00T model from WandB
+2. Test inference on dummy data
+3. Run a full episode in the Fetch environment
+4. Save trajectory visualizations
+
+## Remaining Limitations
 
 ### 2. Action Space Mapping
 The mapping between SO-101 joint space and Fetch Cartesian space is simplified:
@@ -99,43 +115,29 @@ Fetch robot differs from SO-101:
 - SO-101: 6-DoF desktop arm
 - Different workspace and dynamics
 
-## Next Steps for Full Integration
+## Next Steps
 
-### 1. Install Isaac-GR00T
+### 1. Run the Tests
 
+First, test that everything is working:
 ```bash
-# Clone Isaac-GR00T
-git clone https://github.com/NVIDIA/Isaac-GR00T
-cd Isaac-GR00T
-pip install -e ".[base]"
-pip install --no-build-isolation flash-attn==2.7.1.post4
+cd gr00t-rl-lerobot
+python scripts/test_groot_integration.py
 ```
 
-### 2. Modify GR00T Policy
+### 2. Start RL Training
 
-Replace the dummy networks in `gr00t_policy.py`:
-
-```python
-def _load_model(self):
-    # Import Isaac-GR00T
-    from gr00t.model import GR00T_N1_5
-    
-    # Load base model
-    self.model = GR00T_N1_5.from_pretrained("nvidia/GR00T-N1.5-3B")
-    
-    # Load fine-tuned weights from WandB
-    loader = GR00TModelLoader()
-    _, components = loader.load_for_rl(self.config.wandb_artifact_path)
-    
-    # Apply fine-tuned action head
-    action_head_state = components['action_head']
-    self.model.action_head.load_state_dict(action_head_state)
-    
-    # Configure for SO-101
-    self.model.set_embodiment('new_embodiment')
+Once tests pass, you can start SAC training:
+```bash
+python scripts/train_sac_fetch.py
 ```
 
-### 3. Implement Proper Action Mapping
+This will:
+- Use your fine-tuned GR00T as the actor network
+- Train critic networks to estimate values
+- Improve the policy through online interaction
+
+### 3. Implement Proper Action Mapping (Optional Enhancement)
 
 Create inverse kinematics for SO-101:
 
