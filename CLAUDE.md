@@ -117,7 +117,7 @@ This ensures we can reconstruct the timeline of experiments and cross-reference 
 
 ### H100 Machine Access
 Current H100 machines:
-- `ubuntu@192.222.52.59` (Original - for GRPO experiments)
+- `ubuntu@192.222.52.59` (Original - for GRPO and Absolute Zero experiments)
 - `ubuntu@192.222.53.15` (New - **ONLY for GR00T SFT experiments**)
 
 **IMPORTANT**: GR00T SFT experiments MUST be run on `ubuntu@192.222.53.15` only. This server has:
@@ -160,6 +160,16 @@ This repository contains TWO SEPARATE experiment tracks running in parallel:
 ⚠️ **DO NOT CONFUSE THESE TWO EXPERIMENTS!**
 - GRPO = Language model RL training with rewards
 - GR00T = Robot foundation model fine-tuning on demonstrations
+
+### 3. Absolute Zero Self-Play (absolute_zero/)
+- **What**: Self-play learning with proposer and solver models
+- **Where**: `absolute_zero/` subdirectory
+- **Goal**: Implement curriculum learning through self-generated problems
+- **Server**: Use `ubuntu@192.222.52.59` (same as GRPO)
+- **Key files**:
+  - `absolute_zero/train_absolute_zero_unified.py`
+- **WandB tags**: "absolute-zero", "self-play"
+- **Based on**: https://arxiv.org/pdf/2505.03335v2
 
 ## Training Scripts Overview
 

@@ -1,0 +1,257 @@
+# GR00T-RL-LeRobot Usage Guide
+
+This guide explains how to use the GR00T + LeRobot integration for RL training on robotic manipulation tasks.
+
+## Overview
+
+We've created an integration that allows your fine-tuned GR00T-N1.5-3B model to be trained with reinforcement learning on the Gymnasium-Robotics Fetch Pick and Place environment.
+
+### Key Components
+
+1. **Environment Wrapper** (`environments/fetch_wrapper.py`):
+   - Adapts Fetch environment to match SO-101 robot interface
+   - Converts between observation and action spaces
+
+2. **Policy Wrapper** (`policies/gr00t_policy.py`):
+   - Wraps GR00T model to work with LeRobot's policy interface
+   - Currently uses placeholder networks (see limitations)
+
+3. **SAC Training** (`scripts/train_sac_fetch.py`):
+   - Implements Soft Actor-Critic for online RL training
+   - Includes replay buffer, evaluation, and WandB logging
+
+4. **Model Loader** (`utils/gr00t_loader.py`):
+   - Downloads fine-tuned GR00T from WandB artifacts
+   - Provides integration guidance
+
+## Installation
+
+```bash
+# Install dependencies
+cd gr00t-rl-lerobot
+pip install -e .
+
+# Or install manually
+pip install lerobot gymnasium-robotics torch wandb
+```
+
+## Quick Start
+
+### 1. Test Environment Integration
+
+```bash
+cd scripts
+python test_fetch_integration.py
+```
+
+This will:
+- Test the Fetch wrapper
+- Test the GR00T policy
+- Run a sample episode with visualization
+
+### 2. Train with SAC
+
+```bash
+# Make sure you're logged into WandB
+wandb login
+
+# Run SAC training
+python train_sac_fetch.py
+```
+
+Training will:
+- Use Fetch Pick and Place environment
+- Train GR00T policy with SAC
+- Log metrics to WandB
+- Save checkpoints every 10k steps
+
+### 3. Load Your Fine-tuned GR00T Model
+
+To use your actual fine-tuned model instead of placeholders:
+
+```python
+from utils.gr00t_loader import GR00TModelLoader
+
+# Load model from WandB
+loader = GR00TModelLoader()
+model, components = loader.load_for_rl(
+    artifact_name="wild-ai/pippa/gr00t-sft-so100_dualcam-bs32:v0"
+)
+```
+
+## Current Limitations
+
+### 1. Placeholder Networks
+The current implementation uses dummy networks instead of the actual GR00T model because:
+- Loading real GR00T requires Isaac-GR00T repository
+- Diffusion action head implementation is complex
+- Would need NVIDIA model access permissions
+
+### 2. Action Space Mapping
+The mapping between SO-101 joint space and Fetch Cartesian space is simplified:
+- Uses linear mapping instead of proper kinematics
+- May not preserve end-effector orientation correctly
+- Could benefit from learned inverse kinematics
+
+### 3. Environment Mismatch
+Fetch robot differs from SO-101:
+- Fetch: 7-DoF arm with mobile base
+- SO-101: 6-DoF desktop arm
+- Different workspace and dynamics
+
+## Next Steps for Full Integration
+
+### 1. Install Isaac-GR00T
+
+```bash
+# Clone Isaac-GR00T
+git clone https://github.com/NVIDIA/Isaac-GR00T
+cd Isaac-GR00T
+pip install -e ".[base]"
+pip install --no-build-isolation flash-attn==2.7.1.post4
+```
+
+### 2. Modify GR00T Policy
+
+Replace the dummy networks in `gr00t_policy.py`:
+
+```python
+def _load_model(self):
+    # Import Isaac-GR00T
+    from gr00t.model import GR00T_N1_5
+    
+    # Load base model
+    self.model = GR00T_N1_5.from_pretrained("nvidia/GR00T-N1.5-3B")
+    
+    # Load fine-tuned weights from WandB
+    loader = GR00TModelLoader()
+    _, components = loader.load_for_rl(self.config.wandb_artifact_path)
+    
+    # Apply fine-tuned action head
+    action_head_state = components['action_head']
+    self.model.action_head.load_state_dict(action_head_state)
+    
+    # Configure for SO-101
+    self.model.set_embodiment('new_embodiment')
+```
+
+### 3. Implement Proper Action Mapping
+
+Create inverse kinematics for SO-101:
+
+```python
+class SO101Kinematics:
+    def cartesian_to_joint(self, cartesian_action):
+        # Implement IK solver
+        pass
+    
+    def joint_to_cartesian(self, joint_positions):
+        # Implement FK solver
+        pass
+```
+
+### 4. Create Custom SO-101 Environment
+
+Instead of using Fetch, create a proper SO-101 simulation:
+
+```python
+# Using MuJoCo or Isaac Gym
+class SO101PickPlaceEnv(gym.Env):
+    def __init__(self):
+        # Load SO-101 URDF/XML
+        # Set up table and objects
+        pass
+```
+
+## Alternative Approach: Direct RL Training
+
+If LeRobot integration is too complex, you can use standard RL libraries:
+
+```python
+import stable_baselines3 as sb3
+from stable_baselines3 import SAC
+
+# Wrap GR00T as SB3 policy
+class GR00TSB3Policy(sb3.common.policies.BasePolicy):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.gr00t = load_gr00t_model()
+    
+    def forward(self, obs):
+        return self.gr00t.predict(obs)
+
+# Train with SAC
+model = SAC(GR00TSB3Policy, env, verbose=1)
+model.learn(total_timesteps=100000)
+```
+
+## Experiment Ideas
+
+1. **Reward Shaping**: Add intermediate rewards for:
+   - Approaching the object
+   - Successful grasping
+   - Lifting the object
+   - Moving toward goal
+
+2. **Curriculum Learning**: Start with:
+   - Object always in same position
+   - Then randomize object position
+   - Then add distractors
+   - Finally, multiple objects
+
+3. **Language Conditioning**: Use different instructions:
+   - "Pick the red cube"
+   - "Place the object on the left"
+   - "Stack the blocks"
+
+4. **Multi-Task Learning**: Train on multiple tasks:
+   - Pick and place
+   - Pushing
+   - Stacking
+
+## Troubleshooting
+
+### Import Errors
+```bash
+# If LeRobot not found
+pip install lerobot
+
+# If Gymnasium-Robotics not found
+pip install gymnasium-robotics
+```
+
+### CUDA/GPU Issues
+```python
+# Check GPU availability
+import torch
+print(torch.cuda.is_available())
+
+# Set device
+device = "cuda" if torch.cuda.is_available() else "cpu"
+```
+
+### WandB Authentication
+```bash
+# Login to WandB
+wandb login
+
+# Set project programmatically
+wandb.init(project="your-project", entity="your-entity")
+```
+
+## Contributing
+
+To improve this integration:
+
+1. Implement actual GR00T model loading
+2. Add proper SO-101 kinematics
+3. Create better action space mapping
+4. Add more sophisticated reward functions
+5. Implement curriculum learning
+
+## References
+
+- [GR00T SFT Training](../research_journal/gr00t_sft.md)
+- [LeRobot Documentation](https://huggingface.co/docs/lerobot)
+- [Gymnasium-Robotics](https://robotics.farama.org/)
+- [SAC Paper](https://arxiv.org/abs/1801.01290)

@@ -501,6 +501,78 @@ These runs will demonstrate:
 - Early loss values: 0.0007 (excellent starting point)
 - Monitoring for curriculum emergence across all three task types
 
+## Code Improvements - 2025-06-16_03:00
+
+### 1. Fixed Global Step Tracking Issue
+**Problem**: Creating new GRPOTrainer instances each iteration was resetting global_step, causing log overwrites.
+
+**Solution**: Added `GlobalStepManager` callback that:
+- Preserves global step across iterations
+- Prevents WandB log overwrites
+- Maintains proper step continuity
+
+### 2. Added Arithmetic Evaluation
+**Problem**: No standardized evaluation metric - only tracking self-generated task performance.
+
+**Solution**: Added periodic evaluation on `morgan/arithmetic_eval`:
+- Initial evaluation before training
+- Periodic evaluation every N steps (default: 10)
+- Final evaluation after training
+- Logs as `eval/arithmetic_eval` and `eval/arithmetic_eval_percent`
+- Shows improvement: initial → final accuracy
+
+**Implementation**:
+```python
+# New evaluation method in UnifiedAbsoluteZeroTrainer
+def evaluate_on_arithmetic_eval(self, model, num_samples: int = 200) -> float
+
+# New callback for periodic evaluation
+class PeriodicEvaluationCallback(TrainerCallback)
+
+# Command line argument
+--eval-steps N  # Evaluate every N steps
+```
+
+This now matches GRPO experiments by evaluating on the same standardized dataset, allowing direct comparison of approaches.
+
+## Running Absolute Zero Experiments
+
+### GPU Server Access
+**IMPORTANT**: Always run Absolute Zero experiments on the H100 GPU server:
+```bash
+ssh ubuntu@192.222.52.59
+```
+
+### Example Command
+Run experiments directly without shell scripts:
+```bash
+# SSH to GPU server
+ssh ubuntu@192.222.52.59
+
+# Navigate to project
+cd ~/pippa/absolute_zero
+
+# Activate virtual environment
+source az_venv/bin/activate
+
+# Run training (example: quick trial)
+python train_absolute_zero_unified.py \
+    --model Qwen/Qwen2-0.5B-Instruct \
+    --iterations 5 \
+    --batch-size 24 \
+    --seed-buffer-size 32 \
+    --learning-rate 5e-6 \
+    --temperature 0.7 \
+    --beta 0.1 \
+    --eval-steps 2 \
+    --name-suffix quick_trial_logging
+```
+
+### Monitoring
+- Use tmux sessions for long runs
+- Check WandB at https://wandb.ai/wild-ai/pippa
+- Monitor GPU usage with `nvidia-smi`
+
 ## References
 - [Absolute Zero Paper](https://arxiv.org/pdf/2505.03335v2)
 - [GRPO Baseline Results](./GRPO_baseline.md)

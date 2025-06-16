@@ -153,8 +153,17 @@ def load_model_from_wandb(artifact_path: str, config: EvalConfig) -> tuple[BaseP
         "artifact_name": artifact.name,
         "artifact_version": artifact.version,
         "artifact_created_at": artifact.created_at,
-        "artifact_dir": artifact_dir
+        "artifact_dir": artifact_dir,
+        "artifact_aliases": artifact.aliases if hasattr(artifact, 'aliases') else []
     }
+    
+    # Try to extract run ID from artifact metadata
+    if hasattr(artifact, 'logged_by') and artifact.logged_by:
+        try:
+            metadata["source_run_id"] = artifact.logged_by.id
+            print(f"Found source run ID from artifact: {artifact.logged_by.id}")
+        except:
+            pass
     
     # Check what files we have
     available_files = list(Path(artifact_dir).glob("*"))
@@ -236,6 +245,31 @@ def setup_wandb_logging(config: EvalConfig, model_metadata: Dict[str, Any]) -> w
     """Setup WandB for evaluation logging."""
     load_dotenv(os.path.expanduser("~/pippa/.env"))
     
+    # Extract run ID from artifact if available
+    resume_id = None
+    
+    # First check if we have source_run_id from artifact metadata
+    if "source_run_id" in model_metadata:
+        resume_id = model_metadata["source_run_id"]
+        print(f"Using source run ID from artifact metadata: {resume_id}")
+    elif "artifact_aliases" in model_metadata:
+        # Look for run-{id} pattern in aliases
+        import re
+        for alias in model_metadata.get("artifact_aliases", []):
+            run_id_match = re.search(r'run-([a-zA-Z0-9]+)', alias)
+            if run_id_match:
+                resume_id = run_id_match.group(1)
+                print(f"Found run ID from artifact alias: {resume_id}")
+                break
+    
+    # Fallback: try to extract from artifact path
+    if not resume_id and config.wandb_artifact_path:
+        import re
+        run_id_match = re.search(r'run-([a-zA-Z0-9]+)', config.wandb_artifact_path)
+        if run_id_match:
+            resume_id = run_id_match.group(1)
+            print(f"Found run ID from artifact path: {resume_id}")
+    
     # Generate run name if not provided
     if config.wandb_run_name is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -244,25 +278,45 @@ def setup_wandb_logging(config: EvalConfig, model_metadata: Dict[str, Any]) -> w
     
     # Set default tags
     if config.wandb_tags is None:
-        config.wandb_tags = ["gr00t-eval", config.data_config]
+        config.wandb_tags = ["gr00t-sft-eval", config.data_config]
     else:
-        if "gr00t-eval" not in config.wandb_tags:
-            config.wandb_tags.append("gr00t-eval")
+        # Ensure gr00t-sft-eval tag is included
+        if "gr00t-sft-eval" not in config.wandb_tags:
+            config.wandb_tags.append("gr00t-sft-eval")
     
-    # Initialize WandB
-    run = wandb.init(
-        project=config.wandb_project,
-        entity=config.wandb_entity,
-        name=config.wandb_run_name,
-        tags=config.wandb_tags,
-        config={
-            **vars(config),
-            **model_metadata,
-            "eval_type": "open_loop_mse",
-            "task": "so101_table_cleanup"
-        },
-        save_code=True,
-    )
+    # Initialize WandB - resume if we found a run ID
+    if resume_id:
+        print(f"Resuming WandB run: {resume_id}")
+        run = wandb.init(
+            project=config.wandb_project,
+            entity=config.wandb_entity,
+            id=resume_id,
+            resume="allow",
+            name=config.wandb_run_name,
+            tags=config.wandb_tags,
+            config={
+                **vars(config),
+                **model_metadata,
+                "eval_type": "open_loop_mse",
+                "task": "so101_table_cleanup"
+            },
+            save_code=True,
+        )
+    else:
+        # Create new run
+        run = wandb.init(
+            project=config.wandb_project,
+            entity=config.wandb_entity,
+            name=config.wandb_run_name,
+            tags=config.wandb_tags,
+            config={
+                **vars(config),
+                **model_metadata,
+                "eval_type": "open_loop_mse",
+                "task": "so101_table_cleanup"
+            },
+            save_code=True,
+        )
     
     return run
 
@@ -407,13 +461,20 @@ def plot_trajectory_comparison(
 def log_evaluation_results(
     results: List[Dict[str, Any]],
     config: EvalConfig,
-    save_dir: Path
+    save_dir: Path,
+    dataset: LeRobotSingleDataset = None
 ) -> None:
     """Log evaluation results to WandB with rich visualizations."""
     
-    # Create evaluation metrics table
-    metrics_table = wandb.Table(columns=[
-        "trajectory_id", "mse", "max_error", "smoothness", "num_steps"
+    # Create comprehensive evaluation table with prompts and results
+    eval_table = wandb.Table(columns=[
+        "trajectory_id",
+        "task_prompt",
+        "mse", 
+        "max_error",
+        "smoothness",
+        "trajectory_plot",
+        "num_steps"
     ])
     
     # Create per-joint MSE table
@@ -425,13 +486,66 @@ def log_evaluation_results(
     all_max_errors = []
     all_smoothness = []
     
+    # Get task prompts from dataset if available
+    task_prompts = {}
+    if dataset is not None:
+        try:
+            # Load task prompts from dataset - check both possible filenames
+            prompts_file = Path(config.dataset_path) / "meta" / "tasks.jsonl"
+            if not prompts_file.exists():
+                prompts_file = Path(config.dataset_path) / "meta" / "task_prompts.json"
+            
+            if prompts_file.exists():
+                if prompts_file.suffix == '.jsonl':
+                    # Load JSONL format
+                    with open(prompts_file, 'r') as f:
+                        for line in f:
+                            item = json.loads(line.strip())
+                            task_prompts[item["task_index"]] = item.get("task", item.get("task_description", f"Task {item['task_index']}"))
+                else:
+                    # Load JSON format
+                    with open(prompts_file, 'r') as f:
+                        task_prompts_data = json.load(f)
+                        for item in task_prompts_data:
+                            task_prompts[item["task_index"]] = item.get("task_description", f"Task {item['task_index']}")
+        except Exception as e:
+            print(f"Could not load task prompts: {e}")
+    
+    # Process each result
     for result in results:
-        # Add to metrics table
-        metrics_table.add_data(
-            result["trajectory_id"],
+        traj_id = result["trajectory_id"]
+        
+        # Get task prompt for this trajectory
+        task_prompt = "Task prompt not available"
+        if dataset is not None:
+            try:
+                # Get the task index for this trajectory
+                sample = dataset.get_step_data(traj_id, 0)
+                if "annotation.human.task_description" in sample:
+                    task_value = sample["annotation.human.task_description"][0]
+                    # Check if it's already a string (task description) or an index
+                    if isinstance(task_value, str):
+                        task_prompt = task_value
+                    else:
+                        # It's an index, look it up
+                        task_prompt = task_prompts.get(int(task_value), f"Task index: {task_value}")
+            except Exception as e:
+                print(f"Could not get task prompt for trajectory {traj_id}: {e}")
+        
+        # Get trajectory plot if it exists
+        plot_path = save_dir / f"trajectory_{traj_id}_comparison.png"
+        trajectory_plot = None
+        if plot_path.exists():
+            trajectory_plot = wandb.Image(str(plot_path), caption=f"Trajectory {traj_id}")
+        
+        # Add to comprehensive table
+        eval_table.add_data(
+            traj_id,
+            task_prompt,
             result["mse"],
             result["max_error"],
             result["smoothness"],
+            trajectory_plot,
             result["num_steps"]
         )
         
@@ -444,31 +558,16 @@ def log_evaluation_results(
         all_max_errors.append(result["max_error"])
         all_smoothness.append(result["smoothness"])
     
-    # Calculate summary statistics
+    # Calculate summary statistics with eval_prompt/ prefix
     summary_stats = {
-        "eval/mean_mse": np.mean(all_mse),
-        "eval/std_mse": np.std(all_mse),
-        "eval/min_mse": np.min(all_mse),
-        "eval/max_mse": np.max(all_mse),
-        "eval/mean_max_error": np.mean(all_max_errors),
-        "eval/mean_smoothness": np.mean(all_smoothness),
-        "eval/num_trajectories": len(results)
+        "eval_prompt/mean_mse": np.mean(all_mse),
+        "eval_prompt/std_mse": np.std(all_mse),
+        "eval_prompt/min_mse": np.min(all_mse),
+        "eval_prompt/max_mse": np.max(all_mse),
+        "eval_prompt/mean_max_error": np.mean(all_max_errors),
+        "eval_prompt/mean_smoothness": np.mean(all_smoothness),
+        "eval_prompt/num_trajectories": len(results)
     }
-    
-    # Log tables
-    wandb.log({
-        "evaluation_metrics": metrics_table,
-        "per_joint_mse": joint_mse_table,
-        **summary_stats
-    })
-    
-    # Log plots if they exist
-    plot_files = list(save_dir.glob("trajectory_*_comparison.png"))
-    if plot_files:
-        images = []
-        for plot_file in plot_files[:10]:  # Limit to first 10
-            images.append(wandb.Image(str(plot_file), caption=plot_file.stem))
-        wandb.log({"trajectory_comparisons": images})
     
     # Create MSE distribution plot
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -494,14 +593,37 @@ def log_evaluation_results(
     
     plt.tight_layout()
     
-    # Save and log summary plot
+    # Save summary plot
     summary_plot_path = save_dir / "evaluation_summary.png"
     plt.savefig(summary_plot_path, dpi=150, bbox_inches='tight')
     plt.close()
     
-    wandb.log({"evaluation_summary": wandb.Image(str(summary_plot_path))})
+    # Create final comprehensive results table with summary image
+    results_table = wandb.Table(columns=[
+        "evaluation_type",
+        "mean_mse",
+        "num_trajectories", 
+        "summary_plot",
+        "dataset"
+    ])
     
-    # Log final summary
+    results_table.add_data(
+        "open_loop_mse",
+        np.mean(all_mse),
+        len(results),
+        wandb.Image(str(summary_plot_path), caption="Evaluation Summary"),
+        config.dataset_path
+    )
+    
+    # Log all tables and metrics
+    wandb.log({
+        "eval_prompt_tables/trajectory_results": eval_table,
+        "eval_prompt_tables/per_joint_mse": joint_mse_table,
+        "eval_prompt_tables/evaluation_summary": results_table,
+        **summary_stats
+    })
+    
+    # Update summary
     wandb.summary.update(summary_stats)
     
     print("\n" + "="*50)
@@ -588,16 +710,16 @@ def main(config: EvalConfig):
         )
         results.append(result)
         
-        # Log intermediate progress
+        # Log intermediate progress with eval_prompt/ prefix
         current_avg_mse = np.mean([r["mse"] for r in results])
         wandb.log({
-            "eval/trajectory_mse": result["mse"],
-            "eval/running_avg_mse": current_avg_mse,
-            "eval/trajectories_completed": len(results)
+            "eval_prompt/trajectory_mse": result["mse"],
+            "eval_prompt/running_avg_mse": current_avg_mse,
+            "eval_prompt/trajectories_completed": len(results)
         })
     
-    # Log final results
-    log_evaluation_results(results, config, output_dir)
+    # Log final results with dataset
+    log_evaluation_results(results, config, output_dir, dataset)
     
     # Save raw results
     results_file = output_dir / "evaluation_results.json"

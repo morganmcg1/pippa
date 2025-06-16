@@ -1,0 +1,32 @@
+[project]
+name = "gr00t-rl-lerobot"
+version = "0.1.0"
+description = "GR00T-N1.5 integration with LeRobot for RL training on SO-101"
+requires-python = ">=3.10"
+dependencies = [
+    "lerobot",
+    "torch>=2.1.0",
+    "gymnasium>=0.29.0",
+    "gymnasium-robotics>=1.3.0",
+    "mujoco>=3.0.0",
+    "numpy<2.0",
+    "wandb",
+    "python-dotenv",
+    "matplotlib",
+    "opencv-python",
+    "pillow",
+    "tqdm",
+    "tensorboard",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
