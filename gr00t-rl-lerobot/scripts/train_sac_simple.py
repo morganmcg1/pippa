@@ -267,10 +267,10 @@ class SimpleSACTrainer:
         return {
             "observation": {
                 "images": {
-                    "front": torch.from_numpy(obs["observation"]["images"]["front"]).unsqueeze(0),
-                    "wrist": torch.from_numpy(obs["observation"]["images"]["wrist"]).unsqueeze(0),
+                    "front": torch.from_numpy(obs["observation"]["images"]["front"]).unsqueeze(0).to(self.device),
+                    "wrist": torch.from_numpy(obs["observation"]["images"]["wrist"]).unsqueeze(0).to(self.device),
                 },
-                "state": torch.from_numpy(obs["observation"]["state"]).unsqueeze(0),
+                "state": torch.from_numpy(obs["observation"]["state"]).unsqueeze(0).to(self.device),
             }
         }
     
@@ -282,16 +282,16 @@ class SimpleSACTrainer:
                     "front": torch.stack([
                         torch.from_numpy(o["observation"]["images"]["front"])
                         for o in obs_list
-                    ]),
+                    ]).to(self.device),
                     "wrist": torch.stack([
                         torch.from_numpy(o["observation"]["images"]["wrist"])
                         for o in obs_list
-                    ]),
+                    ]).to(self.device),
                 },
                 "state": torch.stack([
                     torch.from_numpy(o["observation"]["state"])
                     for o in obs_list
-                ]),
+                ]).to(self.device),
             }
         }
     
