@@ -459,66 +459,125 @@ class PeriodicEvaluationCallback(TrainerCallback):
 
 def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, iteration: int, global_step: int):
     """Log sample tables for monitoring training progress."""
-    # Create a simple table first to test
-    table = wandb.Table(columns=["iteration", "global_step", "task_type", "sample"])
+    print(f"\n[TABLE LOGGING] Starting table creation for iteration {iteration}, global_step {global_step}")
     
-    # Add a few simple rows
-    table.add_data(iteration, global_step, "deduction", "Test deduction sample")
-    table.add_data(iteration, global_step, "abduction", "Test abduction sample") 
-    table.add_data(iteration, global_step, "induction", "Test induction sample")
-    
-    # Log the simplified table - use commit=False to batch with other logs
-    wandb.log({"samples/iteration_samples": table}, step=global_step, commit=False)
-    print(f"[DEBUG] Logged table 'samples/iteration_samples' with {len(table.data)} rows at step {global_step}")
-    
-    # Also log as artifact to ensure it's saved
-    table_artifact = wandb.Artifact(
-        name=f"sample_tables_iter_{iteration}",
-        type="sample_data"
-    )
-    table_artifact.add(table, "iteration_samples")
-    wandb.log_artifact(table_artifact)
-    
-    # Now create the detailed table
-    detailed_table = wandb.Table(columns=[
+    # Create a comprehensive sample table
+    samples_table = wandb.Table(columns=[
         "iteration", "global_step", "task_type", "role",
-        "prompt", "generation", "result", "is_valid"
+        "prompt", "generation", "reward", "valid"
     ])
     
     model.eval()
     with torch.no_grad():
-        # Just log one sample per task type for testing
-        for task_type in ['deduction']:  # Start with just deduction
-            buffer = trainer.deduction_buffer
-            if len(buffer) >= 4:
-                # Generate 1 proposer sample
-                buffer_samples = buffer.sample(4)
-                prompt = trainer.create_proposer_prompt(task_type, buffer_samples)
-                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-                outputs = model.generate(
-                    **inputs,
-                    max_new_tokens=64,
-                    temperature=1.0,
-                    do_sample=True,
-                    pad_token_id=tokenizer.pad_token_id
-                )
-                generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-                completion = generated[len(prompt):].strip()
-                
-                detailed_table.add_data(
-                    iteration,
-                    global_step,
-                    task_type,
-                    "proposer",
-                    prompt[:100] + "..." if len(prompt) > 100 else prompt,
-                    completion[:100],
-                    "test_result",
-                    True
-                )
+        # Sample from each task type
+        for task_type in ['deduction', 'abduction', 'induction']:
+            # Get the appropriate buffer
+            if task_type == 'deduction':
+                buffer = trainer.deduction_buffer
+                few_shot_size = 4
+            elif task_type == 'abduction':
+                buffer = trainer.abduction_buffer
+                few_shot_size = 4
+            else:
+                buffer = trainer.induction_buffer
+                few_shot_size = 2
+            
+            if len(buffer) < few_shot_size:
+                print(f"[TABLE LOGGING] Skipping {task_type} - insufficient buffer size")
+                continue
+            
+            # Generate 2 proposer samples
+            for i in range(2):
+                try:
+                    buffer_samples = buffer.sample(few_shot_size)
+                    prompt = trainer.create_proposer_prompt(task_type, buffer_samples)
+                    
+                    # Generate completion
+                    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(model.device)
+                    outputs = model.generate(
+                        **inputs,
+                        max_new_tokens=64,
+                        temperature=1.0,
+                        do_sample=True,
+                        pad_token_id=tokenizer.pad_token_id
+                    )
+                    generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                    completion = generated[len(prompt):].strip()
+                    
+                    # Parse and validate
+                    parsed_task = trainer.parse_proposer_generation(completion, task_type)
+                    is_valid = parsed_task is not None
+                    
+                    # Calculate reward (simplified)
+                    reward = 1.0 if is_valid else -1.0
+                    
+                    samples_table.add_data(
+                        iteration,
+                        global_step,
+                        task_type,
+                        "proposer",
+                        prompt[:200] + "..." if len(prompt) > 200 else prompt,
+                        completion[:100] + "..." if len(completion) > 100 else completion,
+                        reward,
+                        is_valid
+                    )
+                    print(f"[TABLE LOGGING] Added {task_type} proposer sample {i+1}")
+                except Exception as e:
+                    print(f"[TABLE LOGGING] Error generating {task_type} proposer sample: {e}")
+            
+            # Generate 2 solver samples
+            if len(buffer) > 0:
+                for i in range(min(2, len(buffer))):
+                    try:
+                        task = buffer.sample(1)[0]
+                        prompt = trainer.create_solver_prompt(task_type, task)
+                        
+                        # Generate completion
+                        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(model.device)
+                        outputs = model.generate(
+                            **inputs,
+                            max_new_tokens=32,
+                            temperature=0.7,
+                            do_sample=True,
+                            pad_token_id=tokenizer.pad_token_id
+                        )
+                        generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                        completion = generated[len(prompt):].strip()
+                        
+                        # Parse result
+                        result = trainer.parse_solver_completion(completion, task_type, task)
+                        is_correct = result == task.get('answer')
+                        reward = 1.0 if is_correct else -1.0
+                        
+                        samples_table.add_data(
+                            iteration,
+                            global_step,
+                            task_type,
+                            "solver",
+                            prompt[:200] + "..." if len(prompt) > 200 else prompt,
+                            completion[:100] + "..." if len(completion) > 100 else completion,
+                            reward,
+                            is_correct
+                        )
+                        print(f"[TABLE LOGGING] Added {task_type} solver sample {i+1}")
+                    except Exception as e:
+                        print(f"[TABLE LOGGING] Error generating {task_type} solver sample: {e}")
     
-    # Log the detailed table with commit=True to push all logs
-    wandb.log({"samples/detailed_samples": detailed_table}, step=global_step, commit=True)
-    print(f"[DEBUG] Logged table 'samples/detailed_samples' with {len(detailed_table.data)} rows")
+    # Log the table WITHOUT step parameter first
+    try:
+        wandb.log({"training_samples": samples_table})
+        print(f"[TABLE LOGGING] Successfully logged table with {len(samples_table.data)} rows")
+    except Exception as e:
+        print(f"[TABLE LOGGING] Error logging table: {e}")
+    
+    # Also log metrics with the step
+    try:
+        wandb.log({
+            "table_rows_logged": len(samples_table.data),
+            "table_iteration": iteration
+        }, step=global_step)
+    except Exception as e:
+        print(f"[TABLE LOGGING] Error logging metrics: {e}")
     
     model.train()
 
@@ -706,9 +765,7 @@ def main():
         }
     )
     
-    # Define metrics to use global_step as x-axis to prevent step warnings
-    wandb.define_metric("train/global_step")
-    wandb.define_metric("*", step_metric="train/global_step")
+    # Note: Not using wandb.define_metric as it can interfere with table logging
     
     print("\n" + "="*60)
     print("ABSOLUTE ZERO UNIFIED IMPLEMENTATION")

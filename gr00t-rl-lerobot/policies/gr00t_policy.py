@@ -26,11 +26,11 @@ try:
     from gr00t.data.schema import EmbodimentTag
     from gr00t.experiment.data_config import DATA_CONFIG_MAP
     from gr00t.model.policy import BasePolicy, Gr00tPolicy
-    GROOT_AVAILABLE = True
 except ImportError:
-    print("Warning: Isaac-GR00T not found. Using placeholder implementation.")
-    GROOT_AVAILABLE = False
-    BasePolicy = None
+    raise ImportError(
+        "Isaac-GR00T is required but not found. Please ensure Isaac-GR00T is installed at ~/pippa/Isaac-GR00T\n"
+        "The GR00T model is required for this policy to function."
+    )
 
 # Note: These imports will need to be adjusted based on actual LeRobot structure
 # For now, creating a standalone implementation
@@ -108,13 +108,8 @@ class GR00TPolicy(PreTrainedPolicy):
         """Load fine-tuned GR00T model from WandB artifact."""
         print(f"Loading GR00T model from {self.config.wandb_artifact_path}")
         
-        if GROOT_AVAILABLE:
-            # Load actual GR00T model
-            self._load_groot_model()
-        else:
-            # Fallback to dummy networks
-            print("Warning: Using placeholder networks. Install Isaac-GR00T for actual model.")
-            self._create_dummy_networks()
+        # Load actual GR00T model - no fallback
+        self._load_groot_model()
     
     def _load_groot_model(self):
         """Load actual GR00T model using Isaac-GR00T."""
@@ -214,42 +209,6 @@ class GR00TPolicy(PreTrainedPolicy):
         
         print("GR00T model loaded successfully!")
         
-    def _create_dummy_networks(self):
-        """Create dummy networks for testing (replace with actual GR00T)."""
-        # Vision encoder (simplified)
-        self.vision_encoder = nn.Sequential(
-            nn.Conv2d(3, 64, 7, stride=2, padding=3),
-            nn.ReLU(),
-            nn.MaxPool2d(3, stride=2),
-            nn.Conv2d(64, 128, 3, padding=1),
-            nn.ReLU(),
-            nn.AdaptiveAvgPool2d((7, 7)),
-            nn.Flatten(),
-            nn.Linear(128 * 7 * 7, 512),
-        )
-        
-        # State encoder
-        self.state_encoder = nn.Sequential(
-            nn.Linear(6, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-        )
-        
-        # Combined feature processing
-        self.feature_combiner = nn.Sequential(
-            nn.Linear(512 * 2 + 256, 512),  # 2 cameras + state
-            nn.ReLU(),
-            nn.Linear(512, 512),
-        )
-        
-        # Action prediction head (simplified diffusion)
-        self.action_predictor = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.ReLU(),
-            nn.Linear(256, self.config.action_dim * self.config.action_horizon),
-        )
-        
     def select_action(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         Select action given observations.
@@ -265,12 +224,8 @@ class GR00TPolicy(PreTrainedPolicy):
             Action tensor of shape (batch_size, action_dim)
         """
         with torch.no_grad():
-            if GROOT_AVAILABLE and hasattr(self, 'groot_policy'):
-                # Use actual GR00T model
-                return self._select_action_groot(batch)
-            else:
-                # Use placeholder implementation
-                return self._select_action_dummy(batch)
+            # Always use actual GR00T model
+            return self._select_action_groot(batch)
     
     def _select_action_groot(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
         """Select action using actual GR00T model."""
@@ -347,49 +302,6 @@ class GR00TPolicy(PreTrainedPolicy):
         
         return groot_batch
     
-    def _select_action_dummy(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
-        """Select action using dummy networks (original implementation)."""
-        # Move batch to device
-        batch = self._batch_to_device(batch)
-        
-        # Extract observations
-        front_img = batch["observation"]["images"]["front"]
-        wrist_img = batch["observation"]["images"]["wrist"]
-        state = batch["observation"]["state"]
-        
-        # Ensure batch dimension
-        if front_img.dim() == 3:
-            front_img = front_img.unsqueeze(0)
-            wrist_img = wrist_img.unsqueeze(0)
-            state = state.unsqueeze(0)
-        
-        # Normalize images to [0, 1]
-        front_img = front_img.float() / 255.0
-        wrist_img = wrist_img.float() / 255.0
-        
-        # Encode visual features
-        front_features = self.vision_encoder(front_img.permute(0, 3, 1, 2))
-        wrist_features = self.vision_encoder(wrist_img.permute(0, 3, 1, 2))
-        
-        # Encode state
-        state_features = self.state_encoder(state)
-        
-        # Combine features
-        combined = torch.cat([front_features, wrist_features, state_features], dim=-1)
-        features = self.feature_combiner(combined)
-        
-        # Predict actions
-        action_predictions = self.action_predictor(features)
-        action_predictions = action_predictions.view(-1, self.config.action_horizon, self.config.action_dim)
-        
-        # Take first action from horizon
-        action = action_predictions[:, 0, :]
-        
-        # Clip to action space bounds
-        action = torch.clamp(action, -1.0, 1.0)
-        
-        return action
-    
     def forward(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
         Forward pass for training (computes loss).
@@ -400,78 +312,34 @@ class GR00TPolicy(PreTrainedPolicy):
         Returns:
             Dictionary with loss and metrics
         """
-        if GROOT_AVAILABLE and hasattr(self, 'groot_policy'):
-            # Use actual GR00T model forward pass
-            groot_batch = self._convert_batch_to_groot(batch)
+        # Use actual GR00T model forward pass
+        groot_batch = self._convert_batch_to_groot(batch)
+        
+        # Add target actions to batch
+        if "action" in batch:
+            target_actions = batch["action"]
+            if isinstance(target_actions, torch.Tensor):
+                target_actions = target_actions.cpu().numpy()
+                if target_actions.ndim == 3:
+                    target_actions = target_actions[0]  # Remove batch dim
             
-            # Add target actions to batch
-            if "action" in batch:
-                target_actions = batch["action"]
-                if isinstance(target_actions, torch.Tensor):
-                    target_actions = target_actions.cpu().numpy()
-                    if target_actions.ndim == 3:
-                        target_actions = target_actions[0]  # Remove batch dim
-                
-                # Split actions into modalities
-                groot_batch["action.single_arm"] = target_actions[:, :5]
-                groot_batch["action.gripper"] = target_actions[:, 5:]
-            
-            # Forward through GR00T
-            outputs = self.groot_policy.model(groot_batch)
-            
-            # Extract loss and metrics
-            loss = outputs.get("loss", torch.tensor(0.0, device=self.device))
-            
-            return {
-                "loss": loss,
-                "metrics": {
-                    "loss": loss.item() if hasattr(loss, 'item') else float(loss),
-                }
-            }
-        else:
-            # Use dummy implementation
-            return self._forward_dummy(batch)
-    
-    def _forward_dummy(self, batch: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """Forward pass using dummy networks."""
-        # Extract inputs
-        front_img = batch["observation"]["images"]["front"]
-        wrist_img = batch["observation"]["images"]["wrist"] 
-        state = batch["observation"]["state"]
-        target_actions = batch["action"]
+            # Split actions into modalities
+            groot_batch["action.single_arm"] = target_actions[:, :5]
+            groot_batch["action.gripper"] = target_actions[:, 5:]
         
-        # Normalize images
-        front_img = front_img.float() / 255.0
-        wrist_img = wrist_img.float() / 255.0
+        # Forward through GR00T
+        outputs = self.groot_policy.model(groot_batch)
         
-        # Encode features
-        front_features = self.vision_encoder(front_img.permute(0, 3, 1, 2))
-        wrist_features = self.vision_encoder(wrist_img.permute(0, 3, 1, 2))
-        state_features = self.state_encoder(state)
-        
-        # Combine and process
-        combined = torch.cat([front_features, wrist_features, state_features], dim=-1)
-        features = self.feature_combiner(combined)
-        
-        # Predict actions
-        action_predictions = self.action_predictor(features)
-        action_predictions = action_predictions.view(-1, self.config.action_horizon, self.config.action_dim)
-        
-        # Compute loss (MSE for now, would use diffusion loss for actual GR00T)
-        # Only compute loss for first n_action_steps
-        pred_actions = action_predictions[:, :self.config.n_action_steps, :]
-        target_actions = target_actions[:, :self.config.n_action_steps, :]
-        
-        loss = nn.functional.mse_loss(pred_actions, target_actions)
+        # Extract loss and metrics
+        loss = outputs.get("loss", torch.tensor(0.0, device=self.device))
         
         return {
             "loss": loss,
             "metrics": {
-                "mse": loss.item(),
-                "action_mean": pred_actions.mean().item(),
-                "action_std": pred_actions.std().item(),
+                "loss": loss.item() if hasattr(loss, 'item') else float(loss),
             }
         }
+    
     
     def reset(self):
         """Reset internal buffers."""

@@ -14,7 +14,7 @@ We've created an integration that allows your fine-tuned GR00T-N1.5-3B model to 
 
 2. **Policy Wrapper** (`policies/gr00t_policy.py`):
    - Wraps GR00T model to work with LeRobot's policy interface
-   - Currently uses placeholder networks (see limitations)
+   - Requires Isaac-GR00T to be installed at ~/pippa/Isaac-GR00T
 
 3. **SAC Training** (`scripts/train_sac_fetch.py`):
    - Implements Soft Actor-Critic for online RL training
@@ -67,7 +67,7 @@ Training will:
 
 ### 3. Load Your Fine-tuned GR00T Model
 
-To use your actual fine-tuned model instead of placeholders:
+The policy automatically loads your fine-tuned model:
 
 ```python
 from utils.gr00t_loader import GR00TModelLoader
@@ -103,13 +103,13 @@ This will:
 
 ## Remaining Limitations
 
-### 2. Action Space Mapping
+### 1. Action Space Mapping
 The mapping between SO-101 joint space and Fetch Cartesian space is simplified:
 - Uses linear mapping instead of proper kinematics
 - May not preserve end-effector orientation correctly
 - Could benefit from learned inverse kinematics
 
-### 3. Environment Mismatch
+### 2. Environment Mismatch
 Fetch robot differs from SO-101:
 - Fetch: 7-DoF arm with mobile base
 - SO-101: 6-DoF desktop arm

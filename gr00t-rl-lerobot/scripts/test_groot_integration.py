@@ -48,13 +48,10 @@ def test_groot_loading():
         policy = GR00TPolicy(config)
         print("\n✓ GR00T policy created successfully!")
         
-        # Check if actual model was loaded
-        if hasattr(policy, 'groot_policy'):
-            print("✓ Actual GR00T model loaded!")
-            print(f"  Model type: {type(policy.groot_policy)}")
-            print(f"  Model device: {policy.device}")
-        else:
-            print("⚠ Warning: Using placeholder networks")
+        # Verify actual model was loaded
+        print("✓ Actual GR00T model loaded!")
+        print(f"  Model type: {type(policy.groot_policy)}")
+        print(f"  Model device: {policy.device}")
         
         return policy
     except Exception as e:
@@ -221,7 +218,9 @@ def main():
         print("✓ Isaac-GR00T available")
     except ImportError:
         print("✗ Isaac-GR00T not found. Make sure it's in ~/pippa/Isaac-GR00T")
-        print("  The tests will run with placeholder networks instead.")
+        print("  This is REQUIRED for the GR00T policy to function.")
+        print("  Cannot proceed without Isaac-GR00T.")
+        return
     
     # Run tests
     results = []

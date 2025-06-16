@@ -129,19 +129,15 @@ Created full implementation framework:
 - **GR00T Integration**: Requires Isaac-GR00T repo for full model loading
 
 ### Limitations & Future Work:
-1. **Placeholder Networks**: Currently using dummy networks instead of actual GR00T
-   - Need Isaac-GR00T dependencies for real model
-   - Diffusion action head implementation missing
-
-2. **Action Mapping**: Simple linear mapping is suboptimal
+1. **Action Mapping**: Simple linear mapping is suboptimal
    - Should implement proper SO-101 forward kinematics
    - Or train a learned mapping network
 
-3. **Camera Simulation**: Basic cropping for dual views
+2. **Camera Simulation**: Basic cropping for dual views
    - Could use multiple Fetch camera angles
    - Or render from different viewpoints
 
-4. **Reward Shaping**: Currently using sparse Fetch rewards
+3. **Reward Shaping**: Currently using sparse Fetch rewards
    - Could add intermediate rewards for grasping, lifting
    - Language-conditioned rewards for specific objects
 
@@ -159,7 +155,7 @@ Successfully integrated the real GR00T model with our framework!
    - **Model Loading**: Automatically downloads from WandB and loads weights
    - **Observation Conversion**: Maps Fetch format to GR00T's expected inputs
    - **Action Extraction**: Handles GR00T's multi-modal action outputs
-   - **Fallback**: Still supports dummy networks if Isaac-GR00T unavailable
+   - **No Fallback**: Requires Isaac-GR00T to be installed
 
 3. **Test Script** (`scripts/test_groot_integration.py`):
    - ✅ Tests model loading from WandB
@@ -211,6 +207,15 @@ action = policy.select_action(obs)
 
 ### Challenge 3: Observation Format Mismatch
 **Solution**: Create adapter to convert between GR00T and LeRobot formats
+
+### Fallback Removal Complete - 2025-06-16_16:30
+Per user request, removed all fallback functionality:
+- ✅ GR00T policy now requires Isaac-GR00T to be installed
+- ✅ No dummy networks or placeholder implementations
+- ✅ Test script exits if Isaac-GR00T not found
+- ✅ Updated documentation to reflect hard requirement
+
+The integration now fully depends on the actual GR00T model, ensuring that only the real model is used for experiments.
 
 ## References
 - [LeRobot Documentation](https://huggingface.co/docs/lerobot)
