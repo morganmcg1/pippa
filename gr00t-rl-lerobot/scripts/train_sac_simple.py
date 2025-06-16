@@ -136,7 +136,7 @@ class SimpleSACTrainer:
     def _create_q_network(self):
         """Create Q-network."""
         class QNetwork(nn.Module):
-            def __init__(self, obs_dim=640, action_dim=6):  # Simplified obs dim
+            def __init__(self, obs_dim=406, action_dim=6):  # 200+200+6 = 406
                 super().__init__()
                 self.net = nn.Sequential(
                     nn.Linear(obs_dim + action_dim, 256),
