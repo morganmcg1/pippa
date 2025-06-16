@@ -797,12 +797,15 @@ def main():
             batch_indices = kwargs.get('batch_indices', [])
             
             for i, completion in enumerate(completions):
+                # With num_generations > 1, we need to map back to the original prompt index
                 if batch_indices:
-                    task, task_type, role = all_info[batch_indices[i]]
+                    prompt_idx = batch_indices[i] % len(all_info)
                 else:
-                    task, task_type, role = all_info[i]
+                    prompt_idx = i % len(all_info)
                 
-                prompt = prompts[i] if prompts else all_prompts[i]
+                task, task_type, role = all_info[prompt_idx]
+                
+                prompt = prompts[i] if prompts else all_prompts[prompt_idx]
                 completion_only = completion[len(prompt):].strip()
                 
                 if role == 'proposer':
