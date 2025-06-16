@@ -41,13 +41,18 @@ pip install lerobot gymnasium-robotics torch wandb
 
 ```bash
 cd scripts
+# Test original Cartesian approach
 python test_fetch_integration.py
+
+# Test different adaptation approaches
+python test_fetch_adaptations.py
 ```
 
 This will:
-- Test the Fetch wrapper
-- Test the GR00T policy
-- Run a sample episode with visualization
+- Test the Fetch wrapper (Cartesian-only)
+- Test the coupled joints approach (6-DoF)
+- Compare different adaptation strategies
+- Run sample episodes with visualization
 
 ### 2. Train with SAC
 
@@ -101,19 +106,40 @@ This will:
 3. Run a full episode in the Fetch environment
 4. Save trajectory visualizations
 
+## Environment Adaptation Approaches
+
+### Approach 1: Cartesian-Only (Default)
+The original wrapper uses 4D Cartesian actions:
+- MuJoCo handles 7-DoF IK internally
+- Quick to start, no modifications needed
+- Good for visual-based learning
+
+### Approach 2: Joint Coupling (New)
+The coupled wrapper simulates 6-DoF:
+- Couples shoulder roll + upperarm roll
+- Better matches SO-101 kinematics
+- Use with `make_fetch_so101_coupled_env()`
+
+Example:
+```python
+# Cartesian approach (quick start)
+env = make_fetch_so101_env()
+
+# Coupled joints approach (better fidelity)
+env = make_fetch_so101_coupled_env(couple_joints=True)
+```
+
 ## Remaining Limitations
 
-### 1. Action Space Mapping
-The mapping between SO-101 joint space and Fetch Cartesian space is simplified:
-- Uses linear mapping instead of proper kinematics
-- May not preserve end-effector orientation correctly
-- Could benefit from learned inverse kinematics
+### 1. Kinematic Differences
+- Fetch has 7-DoF, SO-101 has 6-DoF
+- Workspace and joint limits differ
+- May affect sim-to-real transfer
 
-### 2. Environment Mismatch
-Fetch robot differs from SO-101:
-- Fetch: 7-DoF arm with mobile base
-- SO-101: 6-DoF desktop arm
-- Different workspace and dynamics
+### 2. Visual Sim-to-Real Gap
+- Simulated cameras vs real cameras
+- Lighting and texture differences
+- Domain adaptation may be needed
 
 ## Next Steps
 

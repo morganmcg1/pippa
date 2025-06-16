@@ -217,6 +217,39 @@ Per user request, removed all fallback functionality:
 
 The integration now fully depends on the actual GR00T model, ensuring that only the real model is used for experiments.
 
+### Fetch to SO-101 Adaptation Analysis - 2025-06-16_17:00
+Analyzed multiple approaches for adapting 7-DoF Fetch to 6-DoF SO-101:
+
+#### Option 1: Keep Fetch As-Is (Simplest)
+- **Feasibility**: High - can start immediately
+- **Approach**: Use 4D Cartesian actions, let MuJoCo handle 7-DoF IK internally
+- **Pros**: No modifications needed, GR00T learns from visual observations
+- **Cons**: Can't learn joint-specific behaviors, train/deploy mismatch
+
+#### Option 2: Joint Coupling (Recommended)
+- **Feasibility**: Medium-High - moderate complexity
+- **Approach**: Couple shoulder roll + upperarm roll to move together
+- **Implementation**: Created `fetch_so101_coupled.py` wrapper
+- **Pros**: Maintains Fetch infrastructure, simulates 6-DoF behavior
+- **Cons**: Still an approximation, not true 6-DoF kinematics
+
+#### Option 3: Full XML Modification
+- **Feasibility**: Medium - requires 2-4 weeks
+- **Approach**: Remove upperarm roll joint from MuJoCo XML
+- **Pros**: Most accurate representation
+- **Cons**: Complex implementation, risk of instabilities
+
+#### Decision: Hybrid Approach
+1. **Phase 1**: Use Cartesian-only (Option 1) for immediate testing
+2. **Phase 2**: Implement joint coupling (Option 2) for better fidelity
+3. **Future**: Consider full modification if needed
+
+Created `FetchSO101CoupledWrapper` that:
+- Couples joints 1 & 3 (shoulder + upperarm roll)
+- Reduces effective DOF from 7 to 6
+- Maintains compatibility with existing Fetch infrastructure
+- Can switch between Cartesian and joint-space control
+
 ## References
 - [LeRobot Documentation](https://huggingface.co/docs/lerobot)
 - [HIL-SERL Paper](https://arxiv.org/abs/2410.21845)

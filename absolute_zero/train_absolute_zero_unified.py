@@ -563,19 +563,32 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
                     except Exception as e:
                         print(f"[TABLE LOGGING] Error generating {task_type} solver sample: {e}")
     
-    # Log the table WITHOUT step parameter first
+    # Log the table with the current global step
     try:
-        wandb.log({"training_samples": samples_table})
-        print(f"[TABLE LOGGING] Successfully logged table with {len(samples_table.data)} rows")
+        # Method 1: Log table with step (this should work)
+        wandb.log({"training_samples": samples_table}, step=global_step, commit=False)
+        print(f"[TABLE LOGGING] Successfully logged table with {len(samples_table.data)} rows at step {global_step}")
+        
+        # Method 2: Also save as artifact for redundancy
+        if len(samples_table.data) > 0:
+            table_artifact = wandb.Artifact(
+                name=f"training_samples_iter_{iteration}",
+                type="training_samples"
+            )
+            table_artifact.add(samples_table, f"samples_step_{global_step}")
+            wandb.log_artifact(table_artifact)
+            print(f"[TABLE LOGGING] Also saved table as artifact")
     except Exception as e:
         print(f"[TABLE LOGGING] Error logging table: {e}")
+        import traceback
+        traceback.print_exc()
     
-    # Also log metrics with the step
+    # Commit the logs
     try:
         wandb.log({
             "table_rows_logged": len(samples_table.data),
             "table_iteration": iteration
-        }, step=global_step)
+        }, step=global_step, commit=True)
     except Exception as e:
         print(f"[TABLE LOGGING] Error logging metrics: {e}")
     
@@ -997,10 +1010,15 @@ def main():
         # Force log tables after each iteration for quick runs
         print(f"\n[LOGGING] Creating and logging sample tables for iteration {iteration + 1}...")
         try:
-            log_sample_tables(trainer, trainer.model, trainer.tokenizer, iteration + 1, global_step)
+            # Get the actual current global step from the trainer
+            current_global_step = grpo_trainer.state.global_step
+            print(f"[LOGGING] Using trainer's global_step: {current_global_step}")
+            log_sample_tables(trainer, trainer.model, trainer.tokenizer, iteration + 1, current_global_step)
             print("[LOGGING] Sample table logged successfully!")
         except Exception as e:
             print(f"[LOGGING] Error logging table: {e}")
+            import traceback
+            traceback.print_exc()
         
         # Log baseline statistics
         for key, values in trainer.baselines.baselines.items():

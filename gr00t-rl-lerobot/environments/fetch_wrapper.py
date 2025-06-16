@@ -5,6 +5,11 @@ This wrapper handles:
 1. Observation format conversion (Fetch state → GR00T dual camera + state)
 2. Action space mapping (SO-101 6D joints → Fetch 4D Cartesian)
 3. Goal conditioning for table cleanup tasks
+
+Note: This uses the Cartesian-only approach where Fetch's 7-DoF arm
+is controlled via 4D Cartesian actions (dx, dy, dz, gripper).
+The extra DOF is handled internally by MuJoCo's IK solver.
+For joint-level coupling, see fetch_so101_coupled.py.
 """
 
 import gymnasium as gym
