@@ -631,5 +631,31 @@ wandb.run.log_artifact(artifact)
 - The log_mode warning about IMMUTABLE tables can be ignored for our use case
 - We create fresh tables each iteration, so mutability isn't an issue
 
+### Final Table Logging Solution - 2025-06-16_05:20
+**Run ID**: rmsg9jjl (test_consistent_table_names)
+
+**Critical Fix for INCREMENTAL Mode**:
+- Use **consistent table names** across iterations for INCREMENTAL mode to work
+- Table names: `samples/training_samples`, `samples/proposer_samples`, `samples/solver_samples`
+- NOT unique names like `training_samples_iter_1`, `training_samples_iter_2` etc.
+
+**Final Implementation**:
+```python
+# Use consistent names for INCREMENTAL mode
+table_name = "samples/proposer_samples"  # Same name every iteration!
+
+# Create fresh table instance each time
+table = wandb.Table(columns=[...], allow_mixed_types=False)
+table.add_data(...)  # Add rows
+
+# Log with consistent name
+wandb.run.log({table_name: table}, step=global_step, commit=True)
+
+# Update summary with "_latest" suffix
+wandb.run.summary[f"{table_name}_latest"] = table
+```
+
+This allows WandB to automatically treat the tables as INCREMENTAL, accumulating all logged data across training iterations in a single table view.
+
 ---
 *This journal will be updated as experiments progress.*

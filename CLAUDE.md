@@ -297,6 +297,69 @@ Log generation samples to WandB Tables for better visualization:
 - Use TRL callbacks (see `train_grpo_verifiable_callbacks.py`)
 - Monitor both training reward and evaluation accuracy
 
+### WandB Table Logging (CRITICAL - 2025-06-16)
+
+**Key Requirements for Tables to Appear in WandB UI**:
+
+1. **Use `wandb.run.log()` not `wandb.log()`**
+   ```python
+   # CORRECT
+   wandb.run.log({"table_name": table}, commit=True)
+   
+   # WRONG
+   wandb.log({"table_name": table})
+   ```
+
+2. **Log `global_step` as a metric, NOT as the step parameter**
+   ```python
+   # CORRECT - global_step as a metric
+   wandb.run.log({
+       "samples/training_samples": table,
+       "global_step": global_step
+   }, commit=True)
+   
+   # WRONG - causes step warnings
+   wandb.run.log({"table": table}, step=global_step)
+   ```
+
+3. **Use consistent table names for INCREMENTAL mode**
+   ```python
+   # CORRECT - same name across iterations
+   table_name = "samples/proposer_samples"  # Use this EVERY iteration
+   
+   # WRONG - unique names prevent incremental updates
+   table_name = f"proposer_samples_iter_{iteration}"  # Don't do this!
+   ```
+
+4. **Always use `commit=True`** to force immediate upload
+
+5. **Add to summary for guaranteed visibility**
+   ```python
+   wandb.run.summary[f"{table_name}_latest"] = table
+   ```
+
+**Complete Pattern**:
+```python
+# Create table (fresh instance each time)
+table = wandb.Table(columns=[...], allow_mixed_types=False)
+table.add_data(...)
+
+# Log with consistent name and global_step as metric
+wandb.run.log({
+    "samples/training_samples": table,  # Consistent name
+    "global_step": global_step          # As metric, not step
+}, commit=True)
+
+# Also add to summary
+wandb.run.summary["samples/training_samples_latest"] = table
+```
+
+**Why This Works**:
+- WandB automatically detects repeated logs to same table name
+- Treats them as INCREMENTAL updates
+- All data accumulates in a single table view
+- No step warnings or conflicts
+
 ### WandB Artifact Naming and Aliases
 When saving model checkpoints to WandB artifacts, use consistent naming with aliases for versioning:
 

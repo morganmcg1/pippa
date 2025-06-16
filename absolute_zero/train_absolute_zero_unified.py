@@ -461,11 +461,11 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
     """Log sample tables for monitoring training progress."""
     print(f"\n[TABLE LOGGING] Starting table creation for iteration {iteration}, global_step {global_step}")
     
-    # Create a comprehensive sample table
+    # Create a comprehensive sample table with INCREMENTAL mode for ongoing logging
     samples_table = wandb.Table(columns=[
         "iteration", "global_step", "task_type", "role",
         "prompt", "generation", "reward", "valid"
-    ])
+    ], allow_mixed_types=False)
     
     model.eval()
     with torch.no_grad():
@@ -565,12 +565,16 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
     
     # Log the table with the current global step
     try:
-        # Method 1: Log table with step using run.log() as per docs
-        wandb.run.log({"training_samples": samples_table}, step=global_step, commit=True)
+        # Method 1: Log table with global_step as a metric alongside the table
+        # Use consistent name "samples/training_samples" for INCREMENTAL mode
+        wandb.run.log({
+            "samples/training_samples": samples_table,
+            "global_step": global_step
+        }, commit=True)
         print(f"[TABLE LOGGING] Successfully logged table with {len(samples_table.data)} rows at step {global_step}")
         
         # Method 2: Also add to summary to ensure visibility
-        wandb.run.summary[f"training_samples_iter_{iteration}"] = samples_table
+        wandb.run.summary["samples/training_samples_latest"] = samples_table
         
         # Method 3: Also save as artifact for redundancy
         if len(samples_table.data) > 0:
@@ -644,12 +648,12 @@ def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: Un
             if model is None:
                 return
             
-            # Create table with consistent name
-            table_name = f"{self.role}_samples"
+            # Create table with consistent name for INCREMENTAL mode
+            table_name = f"samples/{self.role}_samples"
             table = wandb.Table(columns=[
                 "iteration", "epoch", "global_step", "task_type", "role",
                 "prompt", "generation", "result", "is_valid_proposal"
-            ])
+            ], allow_mixed_types=False)
             
             model.eval()
             with torch.no_grad():
@@ -730,11 +734,14 @@ def create_epoch_sample_logger(role: str, iteration: int, tokenizer, trainer: Un
                             True  # N/A for solver - always valid attempt
                         )
             
-            # Log the table with global step using run.log() as per docs
-            wandb.run.log({table_name: table}, step=state.global_step, commit=True)
+            # Log the table with global_step as a metric alongside the table
+            wandb.run.log({
+                table_name: table,
+                "global_step": state.global_step
+            }, commit=True)
             
-            # Also add to summary for visibility
-            wandb.run.summary[f"{table_name}_epoch_{self.epoch_count}"] = table
+            # Also add to summary for visibility with "latest" suffix
+            wandb.run.summary[f"{table_name}_latest"] = table
             model.train()
     
     return EpochSampleLogger()
