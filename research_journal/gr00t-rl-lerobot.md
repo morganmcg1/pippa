@@ -433,6 +433,30 @@ cd ../gr00t-rl-lerobot
 VIRTUAL_ENV=../lerobot_venv uv pip install -e .
 ```
 
+## Current Status (2025-06-16_18:00)
+
+### Completed
+1. ✅ Repository structure created
+2. ✅ Research journal initialized
+3. ✅ Reviewed GR00T fine-tuning research
+4. ✅ Completed joint coupling adaptation for Fetch → SO-101
+5. ✅ Core implementation with no fallback (GR00T required)
+6. ✅ Training script ready for SAC experiments
+7. ✅ VM environment setup on ubuntu@192.222.53.15
+8. ✅ Verified Fetch environment works with coupled joints
+9. ✅ Created simple CNN baseline for testing
+
+### In Progress
+- 🔄 Debugging pydantic/numpydantic conflicts with Isaac-GR00T
+- 🔄 Testing SAC training with simple CNN policy first
+
+### Known Issues
+- **Pydantic conflict**: Isaac-GR00T's numpydantic usage conflicts with pydantic 2.11.7
+  - Error: `pydantic._internal._generate_schema.InvalidSchemaError`
+  - Workaround: Using simple CNN policy for initial testing
+- **OpenGL**: Must unset PYOPENGL_PLATFORM (was set to 'egl')
+- **Virtual Environment**: Using existing `sft_venv` due to flash-attn compatibility
+
 ## References
 - [LeRobot Documentation](https://huggingface.co/docs/lerobot)
 - [HIL-SERL Paper](https://arxiv.org/abs/2410.21845)
