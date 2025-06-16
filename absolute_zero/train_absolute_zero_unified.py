@@ -467,9 +467,17 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
     table.add_data(iteration, global_step, "abduction", "Test abduction sample") 
     table.add_data(iteration, global_step, "induction", "Test induction sample")
     
-    # Log the simplified table
-    wandb.log({"iteration_samples": table}, step=global_step)
-    print(f"[DEBUG] Logged table 'iteration_samples' with {len(table.data)} rows at step {global_step}")
+    # Log the simplified table - use commit=False to batch with other logs
+    wandb.log({"samples/iteration_samples": table}, step=global_step, commit=False)
+    print(f"[DEBUG] Logged table 'samples/iteration_samples' with {len(table.data)} rows at step {global_step}")
+    
+    # Also log as artifact to ensure it's saved
+    table_artifact = wandb.Artifact(
+        name=f"sample_tables_iter_{iteration}",
+        type="sample_data"
+    )
+    table_artifact.add(table, "iteration_samples")
+    wandb.log_artifact(table_artifact)
     
     # Now create the detailed table
     detailed_table = wandb.Table(columns=[
@@ -508,9 +516,9 @@ def log_sample_tables(trainer: 'UnifiedAbsoluteZeroTrainer', model, tokenizer, i
                     True
                 )
     
-    # Log the detailed table
-    wandb.log({"detailed_samples": detailed_table}, step=global_step)
-    print(f"[DEBUG] Logged table 'detailed_samples' with {len(detailed_table.data)} rows")
+    # Log the detailed table with commit=True to push all logs
+    wandb.log({"samples/detailed_samples": detailed_table}, step=global_step, commit=True)
+    print(f"[DEBUG] Logged table 'samples/detailed_samples' with {len(detailed_table.data)} rows")
     
     model.train()
 
